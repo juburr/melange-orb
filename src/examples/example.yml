@@ -1,0 +1,17 @@
+description: >
+  The `install` command is used to simplify installation of Melange.
+
+usage:
+  version: 2.1
+  orbs:
+    melange: juburr/melange-orb@1.0.0
+  jobs:
+    build-images:
+      docker:
+        - image: cimg/base:stable
+      steps:
+        - melange/install
+  workflows:
+    use-my-orb:
+      jobs:
+        - build-images
