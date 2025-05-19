@@ -14,7 +14,7 @@ parameters:
     description: Option to perform SHA-512 checksum verification on the downloaded Melange executable.
   version:
     type: string
-    default: "0.23.8"
+    default: "0.25.1"
     description: Specify the semver of the Melange version to install.
 steps:
   - when:
