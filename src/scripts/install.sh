@@ -153,7 +153,14 @@ fi
 
 # If there was no cache hit, go ahead and re-download the binary.
 if [[ ! -f melange ]]; then
-    wget "https://github.com/chainguard-dev/melange/releases/download/v${VERSION}/melange_${VERSION}_linux_amd64.tar.gz" -O melange.tar.gz
+    if command -v wget &> /dev/null; then
+        wget "https://github.com/chainguard-dev/melange/releases/download/v${VERSION}/melange_${VERSION}_linux_amd64.tar.gz" -O melange.tar.gz
+    elif command -v curl &> /dev/null; then
+        curl -L "https://github.com/chainguard-dev/melange/releases/download/v${VERSION}/melange_${VERSION}_linux_amd64.tar.gz" -o melange.tar.gz
+    else
+        echo "ERROR: Neither wget nor curl is available. Please install one of them."
+        exit 1
+    fi
     tar zxvf melange.tar.gz "melange_${VERSION}_linux_amd64/melange" --strip 1
 fi
 
