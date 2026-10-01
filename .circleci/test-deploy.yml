@@ -30,7 +30,9 @@ jobs:
       - melange-orb/install
       - run:
           name: Verify Install
-          command: command -v melange
+          command: |
+            command -v melange
+            melange version | grep -F 'v0.61.2'
 workflows:
   test-deploy:
     jobs:
