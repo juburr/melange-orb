@@ -45,3 +45,14 @@ steps:
       version: "0.62.0"
       verify_checksums: known_versions
 ```
+
+## Supported Platforms
+
+The `install` command detects the machine architecture with `uname -m` and installs the matching Linux build of melange:
+
+| `uname -m` | Release asset installed |
+|---|---|
+| `x86_64` | `melange_<version>_linux_amd64.tar.gz` |
+| `aarch64` or `arm64` | `melange_<version>_linux_arm64.tar.gz` |
+
+Any other architecture, or an operating system other than Linux, fails the install. Checksums are recorded per version and architecture, so `strict` verification covers both amd64 and arm64 (for example, CircleCI's `arm.medium` resource class). The cache key also includes the architecture, so amd64 and arm64 jobs in the same project never restore each other's downloads.

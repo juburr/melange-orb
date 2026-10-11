@@ -2,7 +2,7 @@
 
 # Convenience script, not used by directly by the production orb, but
 # for development purposes when adding SHA-512 checksums to the lookup
-# table in install.sh.
+# table in install.sh. Prints one table entry per supported architecture.
 
 set -e
 set +o history
@@ -25,13 +25,28 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
-# Download the specified version and get the SHA-512 checksum of
-# the melange binary inside. Suppress output for readability; this is
-# dev script, so simply re-enable output if you need to debug anything.
-cd /tmp
-wget "https://github.com/chainguard-dev/melange/releases/download/v${VERSION}/melange_${VERSION}_linux_amd64.tar.gz" -O /tmp/melange.tar.gz -q
-tar zxvf /tmp/melange.tar.gz "melange_${VERSION}_linux_amd64/melange" --strip 1 > /dev/null 2>&1
-CHECKSUM=$(sha512sum /tmp/melange | awk '{ print $1 }')
-echo "[\"${VERSION}\"]=\"${CHECKSUM}\""
-rm /tmp/melange
-rm /tmp/melange.tar.gz
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "${WORK_DIR}"' EXIT
+cd "${WORK_DIR}"
+
+BASE_URL="https://github.com/chainguard-dev/melange/releases/download/v${VERSION}"
+
+# Melange publishes SHA-256 checksums of its release tarballs. Use them to make
+# sure each download is intact before hashing the binary inside it.
+wget "${BASE_URL}/checksums.txt" -O checksums.txt -q
+
+# Download each architecture's tarball and get the SHA-512 checksum of the
+# melange binary inside. Suppress output for readability; this is a dev
+# script, so simply re-enable output if you need to debug anything.
+for ARCH in amd64 arm64; do
+    ASSET="melange_${VERSION}_linux_${ARCH}"
+    wget "${BASE_URL}/${ASSET}.tar.gz" -O "${ASSET}.tar.gz" -q
+    if ! awk -v file="${ASSET}.tar.gz" '$2 == file' checksums.txt | sha256sum --check --status; then
+        echo "ERROR: ${ASSET}.tar.gz does not match the SHA-256 checksum in checksums.txt." >&2
+        exit 1
+    fi
+    tar zxf "${ASSET}.tar.gz" "${ASSET}/melange" --strip 1
+    CHECKSUM=$(sha512sum melange | awk '{ print $1 }')
+    echo "[\"${VERSION}_${ARCH}\"]=\"${CHECKSUM}\""
+    rm melange
+done

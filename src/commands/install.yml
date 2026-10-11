@@ -21,11 +21,17 @@ parameters:
     default: "0.61.2"
     description: Specify the semver of the Melange version to install.
 steps:
+  # The cache key includes the machine architecture so that amd64 and arm64 jobs
+  # never share a tarball. "uname -m" is used instead of the {{ arch }} template,
+  # which also includes the CPU model and would miss the cache across hosts.
   - when:
       condition: << parameters.caching >>
       steps:
+        - run:
+            name: Detect Melange Cache Architecture
+            command: uname -m > /tmp/melange-orb-arch
         - restore_cache:
-            key: melange-cache-<< parameters.version >>
+            key: melange-cache-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
   - run:
       name: Install Melange << parameters.version >>
       environment:
@@ -37,7 +43,7 @@ steps:
       condition: << parameters.caching >>
       steps:
         - save_cache:
-            key: melange-cache-<< parameters.version >>
+            key: melange-cache-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
             paths:
               - melange.tar.gz
   - run:

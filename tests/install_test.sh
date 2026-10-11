@@ -53,7 +53,18 @@ tar -czf "${out}" -C "${src}" "${name}"
 rm -rf "${src}"
 EOF
 cp "${STUB_DIR}/wget" "${STUB_DIR}/curl"
-chmod +x "${STUB_DIR}/circleci" "${STUB_DIR}/wget" "${STUB_DIR}/curl"
+
+# Reports the platform given by FAKE_UNAME_S and FAKE_UNAME_M, so the tests
+# behave the same on every CI machine.
+cat > "${STUB_DIR}/uname" <<'EOF'
+#!/bin/bash
+case "$1" in
+    -s) echo "${FAKE_UNAME_S}" ;;
+    -m) echo "${FAKE_UNAME_M}" ;;
+    *) echo "stub: unexpected uname arguments: $*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "${STUB_DIR}/circleci" "${STUB_DIR}/wget" "${STUB_DIR}/curl" "${STUB_DIR}/uname"
 
 # Runs install.sh in a fresh directory (so there is no cached tarball) and
 # captures its exit status and combined output in STATUS and OUTPUT.
@@ -61,12 +72,16 @@ run_install() {
     local verify_checksums=$1
     local version=$2
     local fake_download=${3:-0}
+    local machine=${4:-x86_64}
+    local os=${5:-Linux}
     CASE_DIR="$(mktemp -d "${WORK_DIR}/case.XXXXXX")"
     mkdir -p "${CASE_DIR}/bin"
     set +e
     OUTPUT=$(
         cd "${CASE_DIR}" &&
         PATH="${STUB_DIR}:${PATH}" \
+        FAKE_UNAME_S="${os}" \
+        FAKE_UNAME_M="${machine}" \
         DOWNLOAD_LOG="${CASE_DIR}/downloads.log" \
         FAKE_DOWNLOAD="${fake_download}" \
         PARAM_INSTALL_PATH="${CASE_DIR}/bin" \
@@ -142,10 +157,61 @@ test_listed_version_with_bad_binary_fails() {
     fi
 }
 
+test_machine_names_map_to_release_assets() {
+    local mapping machine arch
+    for mapping in x86_64:amd64 aarch64:arm64 arm64:arm64; do
+        machine=${mapping%%:*}
+        arch=${mapping##*:}
+        local name="machine ${machine} downloads the linux_${arch} release asset"
+        run_install false "${LISTED_VERSION}" 1 "${machine}"
+        if [[ ${STATUS} -ne 0 ]]; then fail "${name} (install failed)"
+        elif ! grep -qF "/melange_${LISTED_VERSION}_linux_${arch}.tar.gz" "${CASE_DIR}/downloads.log"; then fail "${name} (wrong asset)"
+        elif ! installed; then fail "${name} (no binary installed)"
+        else pass "${name}"
+        fi
+    done
+}
+
+test_checksums_are_keyed_by_architecture() {
+    local name="the expected checksum is looked up by version and architecture"
+    local arm64_checksum
+    arm64_checksum=$(grep -oP "\[\"${LISTED_VERSION}_arm64\"\]=\"\K[0-9a-f]+" "${INSTALL_SCRIPT}")
+    run_install "${DEFAULT_VERIFY_CHECKSUMS}" "${LISTED_VERSION}" 1 aarch64
+    if [[ -z "${arm64_checksum}" ]]; then fail "${name} (no arm64 checksum for ${LISTED_VERSION})"
+    elif ! grep -qF "Expected: ${arm64_checksum}" <<< "${OUTPUT}"; then fail "${name} (arm64 checksum not used)"
+    elif [[ ${STATUS} -eq 0 ]] || installed; then fail "${name} (fake binary was accepted)"
+    else pass "${name}"
+    fi
+}
+
+test_unsupported_architecture_fails() {
+    local name="an unsupported architecture fails, even with verification disabled"
+    run_install false "${LISTED_VERSION}" 1 riscv64
+    if [[ ${STATUS} -eq 0 ]]; then fail "${name} (install succeeded)"
+    elif ! grep -qF "ERROR: Unsupported architecture: riscv64" <<< "${OUTPUT}"; then fail "${name} (wrong error)"
+    elif downloaded; then fail "${name} (a download was attempted)"
+    else pass "${name}"
+    fi
+}
+
+test_unsupported_operating_system_fails() {
+    local name="a non-Linux operating system fails, even with verification disabled"
+    run_install false "${LISTED_VERSION}" 1 arm64 Darwin
+    if [[ ${STATUS} -eq 0 ]]; then fail "${name} (install succeeded)"
+    elif ! grep -qF "ERROR: Unsupported operating system: Darwin" <<< "${OUTPUT}"; then fail "${name} (wrong error)"
+    elif downloaded; then fail "${name} (a download was attempted)"
+    else pass "${name}"
+    fi
+}
+
 test_unlisted_version_fails_by_default
 test_unlisted_version_installs_with_known_versions
 test_unlisted_version_installs_with_verification_disabled
 test_listed_version_with_bad_binary_fails
+test_machine_names_map_to_release_assets
+test_checksums_are_keyed_by_architecture
+test_unsupported_architecture_fails
+test_unsupported_operating_system_fails
 
 if [[ ${FAILURES} -gt 0 ]]; then
     echo "${FAILURES} test(s) failed."
