@@ -22,7 +22,7 @@ Info for security teams:
   - `release-assets.githubusercontent.com` and `objects.githubusercontent.com`: GitHub redirects release downloads from `github.com` to one of these hosts, so the download fails if they are blocked. Allow both; GitHub currently uses `release-assets.githubusercontent.com` and previously used `objects.githubusercontent.com`.
 - Additional access needed by `melange build` itself (not by this orb's `install` command) when building against the [Wolfi](https://wolfi.dev) package repository:
   - `packages.wolfi.dev`: Serves the repository's signing key (`/os/wolfi-signing.rsa.pub`), package index, and the packages that make up the build environment, such as `busybox`.
-  - Builds that list other repositories or keyrings in `environment.contents`, or that fetch sources (`fetch`, `git-checkout`), also need those hosts.
+  - Builds that list other repositories or keyrings in `environment.contents`, fetch sources (`fetch`, `git-checkout`), or download anything from pipeline steps (for example `go mod download`, `npm install`, or `pip install` with a cold cache) also need the hosts those steps contact.
 
 ## Checksum Verification
 
