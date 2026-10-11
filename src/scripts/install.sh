@@ -284,6 +284,27 @@ verify_checksum() {
     echo "Checksum verification passed!"
 }
 
+# Look up the expected checksum before touching the cache or the network, so that
+# strict mode fails closed without downloading anything for an unlisted version.
+EXPECTED_CHECKSUM=${sha512sums[${VERSION}]}
+if [[ "${VERIFY_CHECKSUMS}" == "false" ]]; then
+    echo "WARN: Checksum validation is disabled. This is not recommended."
+elif [[ -z "${EXPECTED_CHECKSUM}" ]]; then
+    # If the version is not in the table, this means that a new version of Melange
+    # was released but this orb hasn't been updated yet to include its checksum in
+    # the lookup table. Strict mode (the default) treats this as a hard error, while
+    # "known_versions" allows installing versions not in the lookup table.
+    if [[ "${VERIFY_CHECKSUMS}" == "known_versions" ]]; then
+        echo "WARN: No checksum available for version ${VERSION}, but strict mode is not enabled."
+        echo "WARN: Either upgrade this orb or submit a PR with the new checksum."
+        echo "WARN: Installing without checksum verification..."
+    else
+        echo "ERROR: No checksum available for version ${VERSION} and strict mode is enabled."
+        echo "ERROR: Either upgrade this orb, submit a PR with the new checksum, or set 'verify_checksums' to 'known_versions'."
+        exit 1
+    fi
+fi
+
 # Check if the melange tar file was in the CircleCI cache.
 # Cache restoration is handled in install.yml
 if [[ -f melange.tar.gz ]]; then
@@ -305,29 +326,8 @@ fi
 
 # An melange binary should exist at this point, regardless of whether it was obtained
 # through cache or re-downloaded. First verify its integrity.
-if [[ "${VERIFY_CHECKSUMS}" != "false" ]]; then
-    EXPECTED_CHECKSUM=${sha512sums[${VERSION}]}
-    if [[ -n "${EXPECTED_CHECKSUM}" ]]; then
-        # If the version is in the table, verify the checksum
-        verify_checksum "melange" "${EXPECTED_CHECKSUM}"
-    else
-        # If the version is not in the table, this means that a new version of Melange
-        # was released but this orb hasn't been updated yet to include its checksum in
-        # the lookup table. Allow developers to configure if they want this to result in
-        # a hard error, via "strict mode" (recommended), or to allow execution for versions
-        # not directly specified in the above lookup table.
-        if [[ "${VERIFY_CHECKSUMS}" == "known_versions" ]]; then
-            echo "WARN: No checksum available for version ${VERSION}, but strict mode is not enabled."
-            echo "WARN: Either upgrade this orb, submit a PR with the new checksum."
-            echo "WARN: Skipping checksum verification..."
-        else
-            echo "ERROR: No checksum available for version ${VERSION} and strict mode is enabled."
-            echo "ERROR: Either upgrade this orb, submit a PR with the new checksum, or set 'verify_checksums' to 'known_versions'."
-            exit 1
-        fi
-    fi
-else
-    echo "WARN: Checksum validation is disabled. This is not recommended. Skipping..."
+if [[ "${VERIFY_CHECKSUMS}" != "false" && -n "${EXPECTED_CHECKSUM}" ]]; then
+    verify_checksum "melange" "${EXPECTED_CHECKSUM}"
 fi
 
 # After verifying integrity, install it by moving it to an appropriate bin
