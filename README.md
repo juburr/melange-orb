@@ -26,7 +26,7 @@ The `install` command checks the SHA-512 checksum of the downloaded `melange` bi
 
 | `verify_checksums` | Version listed in this orb | Version not listed in this orb |
 |---|---|---|
-| `strict` (default) | Verified; the install fails on a mismatch | The install fails before anything is downloaded |
+| `strict` (default) | Verified; the install fails on a mismatch | The install fails before melange is downloaded from GitHub or a cached copy is unpacked |
 | `known_versions` | Verified; the install fails on a mismatch | Installed **without** verification (a warning is logged) |
 | `false` | Not verified (a warning is logged) | Not verified (a warning is logged) |
 

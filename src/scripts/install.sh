@@ -542,8 +542,9 @@ verify_checksum() {
     echo "Checksum verification passed!"
 }
 
-# Look up the expected checksum before touching the cache or the network, so that
-# strict mode fails closed without downloading anything for an unlisted version.
+# Look up the expected checksum before a cached tarball is unpacked or a new one is
+# downloaded, so that strict mode rejects an unlisted version without fetching it
+# from GitHub or unpacking a copy restored from the CircleCI cache.
 EXPECTED_CHECKSUM=${sha512sums[${VERSION}_${ARCH}]}
 if [[ "${VERIFY_CHECKSUMS}" == "false" ]]; then
     echo "WARN: Checksum validation is disabled. This is not recommended."
