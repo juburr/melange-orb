@@ -1,0 +1,22 @@
+# Smoke test package: copies a binary built outside of melange into the APK,
+# the same way a pipeline packages prebuilt release binaries for apko.
+package:
+  name: hello-prebuilt
+  version: 0.0.1
+  epoch: 0
+  description: Smoke test package that copies a prebuilt binary into the APK
+  copyright:
+    - license: MIT
+
+environment:
+  contents:
+    keyring:
+      - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+    repositories:
+      - https://packages.wolfi.dev/os
+    packages:
+      - busybox
+
+pipeline:
+  - runs: |
+      install -Dm755 hello "${{targets.destdir}}/usr/bin/hello"

@@ -56,3 +56,48 @@ The `install` command detects the machine architecture with `uname -m` and insta
 | `aarch64` or `arm64` | `melange_<version>_linux_arm64.tar.gz` |
 
 Any other architecture, or an operating system other than Linux, fails the install. Checksums are recorded per version and architecture, so `strict` verification covers both amd64 and arm64 (for example, CircleCI's `arm.medium` resource class). The cache key also includes the architecture, so amd64 and arm64 jobs in the same project never restore each other's downloads.
+
+## Building Packages
+
+This orb only installs melange. Call the `melange` CLI directly in later steps. On every change, the orb's own CI runs the workflow below on amd64 and arm64 machine executors (see `build-smoke-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)). It generates a signing key, then builds a package that copies a prebuilt binary into a signed APK for the machine's own architecture.
+
+```yaml
+jobs:
+  build-apks:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: arm.medium # or medium for amd64
+    steps:
+      - checkout
+      - melange/install
+      - run:
+          name: Generate Signing Key
+          command: melange keygen # writes melange.rsa and melange.rsa.pub
+      - run:
+          name: Build APKs
+          command: |
+            melange build melange.yaml \
+              --runner docker \
+              --arch "$(uname -m)" \
+              --signing-key melange.rsa \
+              --source-dir dist \
+              --out-dir packages
+```
+
+- `--arch "$(uname -m)"` builds only for the machine's own architecture. Without it, melange builds every architecture the package supports, and building for foreign architectures needs emulation.
+- Packages are written to `packages/<arch>/` (`x86_64` or `aarch64`) along with an `APKINDEX.tar.gz` signed by `melange.rsa`. apko can then use the directory as a local repository, with `melange.rsa.pub` as the trusted key.
+- A key generated per job is fine when apko consumes the packages in the same pipeline. Keep a persistent key if you publish the packages.
+
+### Choosing a Runner
+
+`melange build` runs each package's pipeline in an isolated build environment created by a *runner*. Results on CircleCI's `ubuntu-2404:current` machine images (amd64 `medium` and arm64 `arm.medium`):
+
+| Runner | Result | Setup |
+|---|---|---|
+| `docker` (recommended) | Works on amd64 and arm64 | None. The `circleci` user can already use the machine's Docker daemon. No images are pulled; melange builds the build environment locally. |
+| `bubblewrap` (melange's default on Linux) | Works on amd64 and arm64 after setup | Requires `sudo`: install `bubblewrap`, and allow it to create user namespaces. Without the second step it fails with `bwrap: setting up uid map: Permission denied`, because Ubuntu 24.04's AppArmor restricts unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns = 1`). See [`tests/smoke/setup_bubblewrap.sh`](tests/smoke/setup_bubblewrap.sh). |
+| `qemu` | Not usable | Needs `/dev/kvm`, which machine executors don't provide. |
+
+Pass `--runner` explicitly. If it is omitted on Linux, melange tries `bubblewrap` and fails unless the setup above has been done.
+
+The Docker executor is not covered by these tests and isn't recommended for `melange build`. The `docker` runner needs a local Docker daemon: `setup_remote_docker` runs the daemon on a separate host that can't mount the job's files. The `bubblewrap` runner needs to create user namespaces inside the job's container.

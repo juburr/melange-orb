@@ -19,6 +19,16 @@ release-filters: &release-filters
   tags:
     only: /^v[0-9]+\.[0-9]+\.[0-9]+$/
 
+executors:
+  machine-amd64:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: medium
+  machine-arm64:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: arm.medium
+
 jobs:
   # Create jobs to test the commands of your orbs.
   # You may want to add additional validation steps to ensure the commands are working as expected.
@@ -36,9 +46,7 @@ jobs:
             # e_machine field of the ELF header: 3e00 is x86-64.
             od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx '3e00'
   command-test-arm64:
-    machine:
-      image: ubuntu-2404:current
-    resource_class: arm.medium
+    executor: machine-arm64
     steps:
       - checkout
       - melange-orb/install
@@ -49,6 +57,51 @@ jobs:
             melange version | grep -F 'v0.61.2'
             # e_machine field of the ELF header: b700 is aarch64.
             od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx 'b700'
+  # Runs what a pipeline does after install: generate a signing key, then build a
+  # signed APK for the machine's own architecture that packages a prebuilt binary.
+  build-smoke-test:
+    parameters:
+      executor:
+        type: executor
+      runner:
+        type: enum
+        enum: ["bubblewrap", "docker"]
+    executor: << parameters.executor >>
+    steps:
+      - checkout
+      - melange-orb/install
+      - run:
+          name: Report Runner Prerequisites
+          command: |
+            uname -a
+            sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces || true
+            ls -l /dev/kvm || true
+            docker version --format 'docker server {{.Server.Version}}' || true
+      - when:
+          condition:
+            equal: [bubblewrap, << parameters.runner >>]
+          steps:
+            - run:
+                name: Set Up Bubblewrap
+                command: bash tests/smoke/setup_bubblewrap.sh
+      - run:
+          name: Generate Signing Key
+          command: melange keygen
+      - run:
+          name: Stage Prebuilt Binary
+          command: mkdir -p smoke-src && cp /usr/bin/true smoke-src/hello
+      - run:
+          name: Build Package
+          command: |
+            melange build tests/smoke/melange.yaml \
+              --runner << parameters.runner >> \
+              --arch "$(uname -m)" \
+              --signing-key melange.rsa \
+              --source-dir smoke-src \
+              --out-dir packages
+      - run:
+          name: Verify Package
+          command: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
   # Hermetic tests of the install script, including that a version without a
   # known checksum fails by default.
   install-script-test:
@@ -68,6 +121,12 @@ workflows:
           filters: *filters
       - command-test-arm64:
           filters: *filters
+      - build-smoke-test:
+          matrix:
+            parameters:
+              executor: [machine-amd64, machine-arm64]
+              runner: [bubblewrap, docker]
+          filters: *filters
       - install-script-test:
           filters: *filters
       # The orb must be re-packed for publishing, and saved to the workspace.
@@ -82,6 +141,7 @@ workflows:
             - orb-tools/pack
             - command-test
             - command-test-arm64
+            - build-smoke-test
             - install-script-test
           context: orb-publishing
           filters: *release-filters
