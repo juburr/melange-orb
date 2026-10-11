@@ -37,9 +37,13 @@ if [[ "${BUILT_ARCHES}" != "${ARCH}" ]]; then
     exit 1
 fi
 
+# Archive listings are read into variables rather than piped into grep -q, which
+# exits on the first match and would kill tar with SIGPIPE under pipefail.
 echo "Checking that the APK and the index are signed with $(basename "${PUBLIC_KEY}")..."
-list "${APK}" | require_line "${SIGNATURE}" "${APK}"
-list "${INDEX}" | require_line "${SIGNATURE}" "${INDEX}"
+APK_FILES=$(list "${APK}")
+INDEX_FILES=$(list "${INDEX}")
+require_line "${SIGNATURE}" "${APK}" <<< "${APK_FILES}"
+require_line "${SIGNATURE}" "${INDEX}" <<< "${INDEX_FILES}"
 
 echo "Checking that the index lists the package for ${ARCH}..."
 APKINDEX=$(tar -xzOf "${INDEX}" APKINDEX 2> /dev/null)

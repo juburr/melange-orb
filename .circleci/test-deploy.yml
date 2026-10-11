@@ -82,8 +82,8 @@ jobs:
             equal: [bubblewrap, << parameters.runner >>]
           steps:
             - run:
-                name: Install Bubblewrap
-                command: sudo apt-get update && sudo apt-get install -y bubblewrap
+                name: Set Up Bubblewrap
+                command: bash tests/smoke/setup_bubblewrap.sh
       - run:
           name: Generate Signing Key
           command: melange keygen
