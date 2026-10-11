@@ -11,7 +11,7 @@ This is an unofficial Melange orb used for installing Melange in your CircleCI p
 ## Features
 ### **Secure By Design**
 - **Least Privilege**: Installs to a user-owned directory by default, with no `sudo` usage anywhere in this orb.
-- **Integrity**: Checksum validation of all downloaded binaries using SHA-512.
+- **Integrity**: Checksum validation of all downloaded binaries using SHA-512. Installs fail closed by default when no checksum is known for the requested version (see [Checksum Verification](#checksum-verification)).
 - **Provenance**: Installs directly from Melange's official [releases page](https://github.com/chainguard-dev/melange/releases/) on GitHub. No third-party websites, domains, or proxies are used.
 - **Confidentiality**: All secrets and environment variables are handled in accordance with CircleCI's [security recommendations](https://circleci.com/docs/security-recommendations/) and [best practices](https://circleci.com/docs/orbs-best-practices/).
 - **Privacy**: No usage data of any kind is collected or shipped back to the orb developer.
@@ -19,3 +19,25 @@ This is an unofficial Melange orb used for installing Melange in your CircleCI p
 Info for security teams:
 - Required external access to allow, if running a locked down, self-hosted CircleCI pipeline on-prem:
   - `github.com`: For download and installation of the Melange tool.
+
+## Checksum Verification
+
+The `install` command checks the SHA-512 checksum of the downloaded `melange` binary against a table of checksums maintained in this orb ([`src/scripts/install.sh`](src/scripts/install.sh)). The `verify_checksums` parameter controls what happens:
+
+| `verify_checksums` | Version listed in this orb | Version not listed in this orb |
+|---|---|---|
+| `strict` (default) | Verified; the install fails on a mismatch | The install fails before melange is downloaded from GitHub or a cached copy is unpacked |
+| `known_versions` | Verified; the install fails on a mismatch | Installed **without** verification (a warning is logged) |
+| `false` | Not verified (a warning is logged) | Not verified (a warning is logged) |
+
+> [!IMPORTANT]
+> Before v0.2.0 the default was `known_versions`, which installed unlisted versions without verification. Pipelines that pin a `version` this orb does not list now fail until the orb is upgraded.
+
+If you need a melange release that this orb doesn't list yet, upgrade the orb or open a PR that adds its checksum (generated with [`src/scripts/install_hash.sh`](src/scripts/install_hash.sh)). To accept an unverified binary in the meantime, opt out explicitly:
+
+```yaml
+steps:
+  - melange/install:
+      version: "0.62.0"
+      verify_checksums: known_versions
+```
