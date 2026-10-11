@@ -33,6 +33,22 @@ jobs:
           command: |
             command -v melange
             melange version | grep -F 'v0.61.2'
+            # e_machine field of the ELF header: 3e00 is x86-64.
+            od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx '3e00'
+  command-test-arm64:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: arm.medium
+    steps:
+      - checkout
+      - melange-orb/install
+      - run:
+          name: Verify Install
+          command: |
+            command -v melange
+            melange version | grep -F 'v0.61.2'
+            # e_machine field of the ELF header: b700 is aarch64.
+            od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx 'b700'
   # Hermetic tests of the install script, including that a version without a
   # known checksum fails by default.
   install-script-test:
@@ -50,6 +66,8 @@ workflows:
       # Test your orb's commands in a custom job and test your orb's jobs directly as a part of this workflow.
       - command-test:
           filters: *filters
+      - command-test-arm64:
+          filters: *filters
       - install-script-test:
           filters: *filters
       # The orb must be re-packed for publishing, and saved to the workspace.
@@ -63,6 +81,7 @@ workflows:
           requires:
             - orb-tools/pack
             - command-test
+            - command-test-arm64
             - install-script-test
           context: orb-publishing
           filters: *release-filters
