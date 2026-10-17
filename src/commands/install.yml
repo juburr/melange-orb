@@ -1,40 +1,54 @@
-description: Installs the melange binary. This command should be invoked prior to calling any other commands.
+description: >
+  Installs melange for Linux on amd64 or arm64, picked from the machine's CPU
+  architecture, after verifying its SHA-512 checksum. Run this before the
+  orb's other commands.
 parameters:
   caching:
     type: boolean
     default: true
+    description: >
+      Cache the downloaded release between jobs, keyed by version and CPU
+      architecture. Only verified releases are cached, and a cached release
+      is verified again before it is installed.
   install_path:
     type: string
-    default: "/home/circleci/bin"
-    description: Path to a binary directory not requiring root access (no trailing slash).
+    default: ""
+    description: >
+      Absolute path of the directory to install melange into. It is created
+      if needed and added to the PATH of later steps when it isn't already on
+      it, and must be writable without root. Environment variables are
+      expanded. Defaults to $HOME/bin.
   verify_checksums:
     type: enum
     enum: ["false", "known_versions", "strict"]
     default: strict
     description: >
-      SHA-512 checksum verification of the downloaded Melange executable.
-      "strict" (default) fails the install if this orb has no checksum for the requested version.
-      "known_versions" verifies versions this orb has a checksum for, but installs any other version without verification.
-      "false" disables verification entirely (not recommended).
+      SHA-512 verification against this orb's checksum table. "strict"
+      (default) fails before downloading anything when the version has no
+      checksum in the table. "known_versions" verifies listed versions and
+      installs unlisted versions unverified, with a warning. "false" skips
+      verification and is not recommended.
   version:
     type: string
     default: "0.61.2"
-    description: Specify the semver of the Melange version to install.
+    description: >
+      Version of melange to install, such as 0.61.2. A leading "v" is
+      ignored, and environment variables are expanded.
 steps:
-  # The cache key includes the machine architecture so that amd64 and arm64 jobs
-  # never share a tarball. "uname -m" is used instead of the {{ arch }} template,
-  # which also includes the CPU model and would miss the cache across hosts.
   - when:
       condition: << parameters.caching >>
       steps:
+        # The cache key names the CPU with uname -m rather than {{ arch }},
+        # which also encodes the CPU model and would split the cache by host.
         - run:
-            name: Detect Melange Cache Architecture
+            name: Prepare melange cache key
             command: uname -m > /tmp/melange-orb-arch
         - restore_cache:
-            key: melange-cache-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
+            key: melange-orb-v1-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
   - run:
-      name: Install Melange << parameters.version >>
+      name: Install melange << parameters.version >>
       environment:
+        PARAM_CACHING: << parameters.caching >>
         PARAM_INSTALL_PATH: << parameters.install_path >>
         PARAM_VERIFY_CHECKSUMS: << parameters.verify_checksums >>
         PARAM_VERSION: << parameters.version >>
@@ -43,9 +57,6 @@ steps:
       condition: << parameters.caching >>
       steps:
         - save_cache:
-            key: melange-cache-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
+            key: melange-orb-v1-<< parameters.version >>-{{ checksum "/tmp/melange-orb-arch" }}
             paths:
-              - melange.tar.gz
-  - run:
-      name: Cleanup Melange Install
-      command: rm melange.tar.gz
+              - ~/.cache/melange-orb
