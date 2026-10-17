@@ -3,9 +3,9 @@
 set -e
 
 # Ensure CircleCI environment variables can be passed in as orb parameters
-INSTALL_PATH=$(circleci env subst "${PARAM_INSTALL_PATH}")
+INSTALL_PATH=$(printf '%s' "${PARAM_INSTALL_PATH}" | circleci env subst)
 VERIFY_CHECKSUMS="${PARAM_VERIFY_CHECKSUMS}"
-VERSION=$(circleci env subst "${PARAM_VERSION}")
+VERSION=$(printf '%s' "${PARAM_VERSION}" | circleci env subst)
 
 # Melange publishes a Linux binary per architecture. Map the machine name reported
 # by the kernel to the name used in Melange's release assets, and fail on anything

@@ -112,6 +112,9 @@ jobs:
       - run:
           name: Run Install Script Tests
           command: bash tests/install_test.sh
+      - run:
+          name: Run circleci env subst Tests
+          command: bash tests/env_subst_test.sh
 workflows:
   test-deploy:
     jobs:

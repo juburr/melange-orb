@@ -21,10 +21,12 @@ STUB_DIR="${WORK_DIR}/stubs"
 mkdir -p "${STUB_DIR}"
 
 # "circleci env subst" is only available on CircleCI; the inputs used here
-# contain no variables, so echoing them back is equivalent.
+# contain no variables, so echoing them back is equivalent. Like the real CLI,
+# the stub reads the value from stdin. It fails if the value is passed as an
+# argument, which the real CLI would parse as a flag if it started with "-".
 cat > "${STUB_DIR}/circleci" <<'EOF'
 #!/bin/bash
-[[ "$1 $2" == "env subst" ]] && printf '%s\n' "$3"
+[[ "$1 $2" == "env subst" && $# -eq 2 ]] && cat
 EOF
 
 # Stands in for both wget and curl. Every request is recorded in DOWNLOAD_LOG.
