@@ -46,6 +46,9 @@ steps:
         - run:
             name: Prepare melange cache key
             command: echo "$(uname -m) ${HOME}" > /tmp/melange-orb-cache-key
+        # A saved cache can't be replaced. Bump v1 when an existing checksum
+        # table entry changes, so caches saved for the old bytes stop being
+        # restored.
         - restore_cache:
             key: melange-orb-v1-<< parameters.version >>-{{ checksum "/tmp/melange-orb-cache-key" }}
   - run:
