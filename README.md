@@ -126,7 +126,7 @@ The `install` command accepts the following parameters. `version` and `install_p
 | `version` | string | Pinned by each orb release | The melange release to install, without the leading `v` (for example, `0.61.2`). |
 | `verify_checksums` | enum | `strict` | `strict`, `known_versions`, or `false`. See [Checksum Verification](#-checksum-verification). |
 | `install_path` | string | `$HOME/bin` | Absolute directory to install the `melange` binary into. It is created if needed and added to `PATH` for later steps when it isn't already there. |
-| `caching` | boolean | `true` | Cache the downloaded release tarball, keyed by melange version and machine architecture. Only verified tarballs are cached, and they are verified again when restored. |
+| `caching` | boolean | `true` | Cache the downloaded release tarball, keyed by melange version, machine architecture and home directory. Only verified tarballs are cached, and they are verified again when restored. |
 
 ## 🔐 Checksum Verification
 
