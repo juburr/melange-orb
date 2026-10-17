@@ -102,16 +102,13 @@ jobs:
       - run:
           name: Verify Package
           command: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
-  # Hermetic tests of the install script, including that a version without a
-  # known checksum fails by default.
-  install-script-test:
+  # The install contract runs in the setup workflow (config.yml); this checks
+  # that parameter values reach circleci env subst on stdin.
+  env-subst-test:
     docker:
       - image: cimg/base:current-22.04
     steps:
       - checkout
-      - run:
-          name: Run Install Script Tests
-          command: bash tests/install_test.sh
       - run:
           name: Run circleci env subst Tests
           command: bash tests/env_subst_test.sh
@@ -130,7 +127,7 @@ workflows:
               executor: [machine-amd64, machine-arm64]
               runner: [bubblewrap, docker]
           filters: *filters
-      - install-script-test:
+      - env-subst-test:
           filters: *filters
       # The orb must be re-packed for publishing, and saved to the workspace.
       - orb-tools/pack:
@@ -145,6 +142,6 @@ workflows:
             - command-test
             - command-test-arm64
             - build-smoke-test
-            - install-script-test
+            - env-subst-test
           context: orb-publishing
           filters: *release-filters
