@@ -14,14 +14,16 @@
 #      printf command that prints one of them starts its text with it and
 #      has >&2 (or is inside a { ...; } >&2 group on the same line).
 #      Error:, FATAL:, WARNING: and Warning: are not used.
-#   5. Lines written to $BASH_ENV quote their value with printf %q, so no
-#      value can end the quoting or run a command when later steps source it.
+#   5. Exports written by echo or printf quote every value with printf %q,
+#      so no value can end the quoting or run a command when later steps
+#      source $BASH_ENV.
 #   6. eval only runs code the orb itself includes: a variable whose name
 #      ends in _LIB or _SCRIPT. This covers eval behind command, builtin or
 #      variable assignments, and inside $(...).
 #
 # Each line is split into its commands at ;, && and || outside quotes, and
-# every command is checked on its own. Commands that span lines, or a
+# every command is checked on its own. A >&2 only counts outside quotes and
+# comments. Commands that span lines, or a
 # { ...; } >&2 group over several lines, are not followed: write one message
 # command per line with its own >&2.
 #
@@ -45,10 +47,12 @@ fail() {
 }
 
 # split_commands LINE: sets the commands array to LINE's commands, split at
-# ;, && and || outside single and double quotes.
+# ;, && and || outside single and double quotes, and the skeletons array to
+# the same commands with quoted text and a trailing # comment removed.
 split_commands() {
-    local line=$1 current="" quote="" char i
+    local line=$1 current="" skeleton="" quote="" char prev=" " i
     commands=()
+    skeletons=()
     for ((i = 0; i < ${#line}; i++)); do
         char=${line:i:1}
         if [[ "${quote}" == "'" ]]; then
@@ -61,24 +65,45 @@ split_commands() {
             [[ "${char}" != '"' ]] || quote=""
         elif [[ "${char}" == "'" || "${char}" == '"' ]]; then
             quote=${char}
+        elif [[ "${char}" == "#" && "${prev}" =~ [[:space:]] ]]; then
+            break
         elif [[ "${char}" == ";" ]]; then
             commands+=("${current}")
+            skeletons+=("${skeleton}")
             current=""
+            skeleton=""
+            prev=${char}
             continue
         elif [[ "${char}" == "&" || "${char}" == "|" ]] && [[ "${line:i+1:1}" == "${char}" ]]; then
             commands+=("${current}")
+            skeletons+=("${skeleton}")
             current=""
+            skeleton=""
             i=$((i + 1))
+            prev=${char}
             continue
+        else
+            skeleton+=${char}
         fi
         current+=${char}
+        prev=${char}
     done
     commands+=("${current}")
+    skeletons+=("${skeleton}")
 }
 
-mapfile -t scripts < <(cd "${root}" && find src/scripts -name '*.sh' -type f \
+if [[ ! -d "${root}/src/scripts" ]]; then
+    echo "ERROR: ${root}/src/scripts does not exist" >&2
+    exit 1
+fi
+# A command substitution, so set -e stops here if find fails.
+listing=$(cd "${root}" && find src/scripts -name '*.sh' -type f \
     ! -path src/scripts/install.sh ! -path src/scripts/install_hash.sh ! -path src/scripts/cache_key.sh |
     LC_ALL=C sort)
+scripts=()
+if [[ -n "${listing}" ]]; then
+    mapfile -t scripts <<< "${listing}"
+fi
 if [[ ${#scripts[@]} -eq 0 ]]; then
     echo "No scripts to check besides the shared install code."
     exit 0
@@ -129,17 +154,19 @@ for script in "${scripts[@]}"; do
         # A { ...; } >&2 or ( ...; ) >&2 group on this line sends every
         # command in it to stderr.
         group_to_stderr=false
-        if [[ "${commands[-1]}" =~ ^[[:space:]]*[\}\)][[:space:]]*(1?>&2)([[:space:]]|$) ]]; then
+        if [[ "${skeletons[-1]}" =~ ^[[:space:]]*[\}\)][[:space:]]*(1?>&2)([[:space:]]|$) ]]; then
             group_to_stderr=true
         fi
 
-        for cmd in "${commands[@]}"; do
+        for ((c = 0; c < ${#commands[@]}; c++)); do
+            cmd=${commands[c]}
+            skeleton=${skeletons[c]}
             # 3. History and xtrace: any -...x... option or -o xtrace.
             if [[ "${cmd}" =~ ${lead}set[[:space:]] ]]; then
                 if [[ "${cmd}" =~ [[:space:]]\+o[[:space:]]+history ]]; then
                     fail "${where}: remove 'set +o history'; it does nothing in a non-interactive shell"
                 fi
-                if [[ "${cmd}" =~ [[:space:]]-[A-Za-z]*x[A-Za-z]*([[:space:]]|$) || "${cmd}" =~ -o[[:space:]]+xtrace([[:space:]]|$) ]]; then
+                if [[ "${cmd}" =~ [[:space:]]-[A-Za-z]*x[A-Za-z]*([[:space:]]|[\)\}&|]|$) || "${cmd}" =~ -o[[:space:]]+xtrace([[:space:]]|[\)\}&|]|$) ]]; then
                     fail "${where}: do not enable xtrace; it prints secrets"
                 fi
             fi
@@ -155,17 +182,23 @@ for script in "${scripts[@]}"; do
                     if ! [[ "${cmd}" =~ [\"\'](ERROR|WARN): ]]; then
                         fail "${where}: start the message text with ${prefix}:"
                     fi
-                    if [[ "${cmd}" != *">&2"* && "${group_to_stderr}" == false ]]; then
+                    if [[ "${skeleton}" != *">&2"* && "${group_to_stderr}" == false ]]; then
                         fail "${where}: ${prefix}: messages go to stderr (>&2)"
                     fi
                 fi
-                # 5. Exports: a value that comes from an expansion or a %s,
-                # before any redirection, must be quoted with %q instead.
-                before_redirect=${cmd%%>*}
-                if [[ "${before_redirect}" =~ export[[:space:]]+([A-Za-z_][A-Za-z0-9_]*|%s)= ]] \
-                    && [[ "${before_redirect}" =~ \$|%s ]] && [[ "${before_redirect}" != *"%q"* ]]; then
-                    fail "${where}: write exports with printf 'export %s=%q\\n' NAME \"\$value\""
-                fi
+                # 5. Exports: each export NAME= written before the first
+                # redirection takes its value from %q, or from text with no
+                # expansion or conversion in it.
+                rest=${cmd%%>*}
+                export_re='export[[:space:]]+([A-Za-z_][A-Za-z0-9_]*|%[a-z])=([^[:space:]\\]*)'
+                while [[ "${rest}" =~ ${export_re} ]]; do
+                    value=${BASH_REMATCH[2]}
+                    rest=${rest#*"${BASH_REMATCH[0]}"}
+                    if [[ "${value}" != "%q" && ( "${value}" == *'$'* || "${value}" == *%* || "${value}" == *'`'* ) ]]; then
+                        fail "${where}: write exports with printf 'export %s=%q\\n' NAME \"\$value\""
+                        break
+                    fi
+                done
             fi
 
             # 6. eval at a command position, or inside $(...) or backticks.
