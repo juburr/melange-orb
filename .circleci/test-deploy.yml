@@ -112,6 +112,14 @@ jobs:
       - run:
           name: Run circleci env subst Tests
           command: bash tests/env_subst_test.sh
+  shell-conventions-test:
+    docker:
+      - image: cimg/base:current-22.04
+    steps:
+      - checkout
+      - run:
+          name: Run Shell Conventions Test
+          command: bash tests/shell_conventions_test.sh
 workflows:
   test-deploy:
     jobs:
@@ -129,6 +137,8 @@ workflows:
           filters: *filters
       - env-subst-test:
           filters: *filters
+      - shell-conventions-test:
+          filters: *filters
       # The orb must be re-packed for publishing, and saved to the workspace.
       - orb-tools/pack:
           filters: *release-filters
@@ -143,5 +153,6 @@ workflows:
             - command-test-arm64
             - build-smoke-test
             - env-subst-test
+            - shell-conventions-test
           context: orb-publishing
           filters: *release-filters
