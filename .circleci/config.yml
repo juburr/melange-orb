@@ -28,6 +28,7 @@ workflows:
       - orb-tools/pack:
           filters: *filters
       - orb-tools/review:
+          orb_name: melange
           filters: *filters
       - shellcheck/check:
           filters: *filters
