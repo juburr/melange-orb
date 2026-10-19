@@ -94,7 +94,7 @@ Add the orb, call `melange/install`, then use the `melange` CLI directly in late
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@0.2
+  melange: juburr/melange-orb@1.0.0
 
 jobs:
   build-apks:
@@ -172,7 +172,7 @@ Environment variables are expanded in `version` and `install_path`.
 
 ## 📦 Upgrading
 
-Upgrading from 0.1.0? No parameters were renamed, but `install` changed.
+Upgrading from 0.1.0 to v1.0.0? No parameters were renamed, but `install` changed.
 
 Behavior changes:
 - `verify_checksums` defaults to `strict` instead of `known_versions`, so a melange version with no checksum in the orb's table fails the install. See [Checksum Verification](#-checksum-verification).
@@ -248,7 +248,7 @@ steps:
 ```
 
 > [!WARNING]
-> Before v0.2.0 the default was `known_versions`, which installed unlisted versions without verification. Pipelines that pin a `version` this orb does not list now fail until the orb is upgraded.
+> Before v1.0.0 the default was `known_versions`, which installed unlisted versions without verification. Pipelines that pin a `version` this orb does not list now fail until the orb is upgraded.
 
 ## 🌐 Network Access
 
