@@ -9,15 +9,18 @@
 #   - carries on when apt-get update fails, but fails when the install does
 #   - fails clearly without root, or without a package manager it knows
 #   - loads an AppArmor profile for bwrap's real path only when AppArmor
-#     restricts unprivileged user namespaces and bwrap fails, and refuses a
-#     path it can't write into the profile safely
+#     restricts unprivileged user namespaces, bwrap fails, and AppArmor's
+#     interface is there to load it through (a container sees the host's
+#     restriction but has no interface), and refuses a path it can't write
+#     into the profile safely
 #   - checks bwrap with the namespaces and mounts melange's runner uses, and
 #     explains a failure: containers, an old bwrap, user namespaces turned off
 #   - refuses to run anywhere but Linux
 #
 # sudo, the package managers, bwrap, apparmor_parser, id and uname are
-# stubbed, and a copy of the script reads kernel settings and container
-# markers from a fake root, so nothing on this machine is changed.
+# stubbed, and a copy of the script reads kernel settings, AppArmor's
+# interface and container markers from a fake root, so nothing on this
+# machine is changed.
 #
 # Run from a checkout:
 #   bash PATH_TO_THIS_FILE
@@ -76,13 +79,15 @@ rc_is() { [[ "${RC}" -eq "$1" ]]; }
 sudo_always_n() { ! grep '^sudo ' "${LOG}" | grep -qv '^sudo -n '; }
 profile_has() { grep -qFx -- "$1" "${PROFILE}"; }
 
-# The script, reading /proc/sys and the container markers from FAKE.
+# The script, reading /proc/sys, AppArmor's interface and the container
+# markers from FAKE.
 SCRIPT="${WORK}/setup_bubblewrap.sh"
 sed -e "s#\"/proc/sys/#\"${FAKE}/proc/sys/#" \
+    -e "s#-d /sys/kernel/security/apparmor#-d ${FAKE}/sys/kernel/security/apparmor#" \
     -e "s#-f /\\.dockerenv#-f ${FAKE}/.dockerenv#" \
     -e "s#-f /run/\\.containerenv#-f ${FAKE}/run/.containerenv#" \
     "${SETUP_SH}" > "${SCRIPT}"
-for path in "${FAKE}/proc/sys/" "${FAKE}/.dockerenv" "${FAKE}/run/.containerenv"; do
+for path in "${FAKE}/proc/sys/" "${FAKE}/sys/kernel/security/apparmor" "${FAKE}/.dockerenv" "${FAKE}/run/.containerenv"; do
     if ! grep -qF -- "${path}" "${SCRIPT}"; then
         echo "FAIL: could not point the test copy of setup_bubblewrap.sh at ${path}"
         exit 1
@@ -195,6 +200,12 @@ with_pm() { ln -s "${WORK}/package-manager" "${CASE}/pm/$1"; }
 with_bwrap() { cp "${WORK}/bwrap" "${CASE}/installed/bwrap"; }
 without_sudo() { rm -f "${CASE}/sudo/sudo"; }
 set_sysctl() { printf '%s\n' "$2" > "${FAKE}/proc/sys/${1//./\/}"; }
+# restrict_userns: AppArmor restricts unprivileged user namespaces, on a
+# machine where profiles can be loaded, such as a machine executor.
+restrict_userns() {
+    set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+    mkdir -p "${FAKE}/sys/kernel/security/apparmor"
+}
 
 # run [VAR=value...]: runs the script as a user other than root, with only
 # the stubs and BASE on the PATH.
@@ -292,7 +303,7 @@ check "runs no package manager" not_called_like "apt-get"
 
 new_case "AppArmor restricts user namespaces"
 with_bwrap
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 run BWRAP_MODE=apparmor
 check "succeeds" rc_is 0
 check "loads the profile through sudo -n" called "sudo -n apparmor_parser -r"
@@ -305,14 +316,14 @@ new_case "AppArmor profile names bwrap's real path, not a symlink"
 mkdir -p "${CASE}/real"
 cp "${WORK}/bwrap" "${CASE}/real/bwrap"
 ln -s "${CASE}/real/bwrap" "${CASE}/installed/bwrap"
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 run BWRAP_MODE=apparmor
 check "succeeds" rc_is 0
 check "profile attaches to the real path" profile_has "profile melange-orb-bwrap-userns ${CASE}/real/bwrap flags=(unconfined) {"
 
 new_case "a newly installed bwrap gets the AppArmor profile too"
 with_pm apt-get
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 run BWRAP_MODE=apparmor
 check "succeeds" rc_is 0
 check "installs bubblewrap" called_like "apt-get -qq install"
@@ -326,10 +337,11 @@ check "fails" rc_is 1
 check "loads no AppArmor profile" not_called_like "apparmor_parser"
 check "says bwrap can't create namespaces" output_has "ERROR: bwrap can't create the namespaces melange's bubblewrap runner needs, as circleci."
 check "shows bwrap's output" output_has "  bwrap: setting up uid map: Permission denied"
+check "doesn't blame AppArmor" output_lacks "AppArmor restricts"
 
 new_case "a profile that can't be loaded fails the step"
 with_bwrap
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 run BWRAP_MODE=apparmor APPARMOR_FAILS=1
 check "fails" rc_is 1
 check "says the profile wasn't loaded" output_has "ERROR: Could not load the AppArmor profile"
@@ -337,7 +349,7 @@ check "says the profile wasn't loaded" output_has "ERROR: Could not load the App
 new_case "the AppArmor profile needs root"
 with_bwrap
 without_sudo
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 run BWRAP_MODE=apparmor
 check "fails" rc_is 1
 check "says root is needed" output_has "ERROR: Setting up bubblewrap needs root to allow bwrap to create user namespaces"
@@ -346,7 +358,7 @@ check "loads no AppArmor profile" not_called_like "apparmor_parser"
 new_case "a bwrap path that can't go into a profile is refused"
 mkdir -p "${CASE}/odd dir"
 cp "${WORK}/bwrap" "${CASE}/odd dir/bwrap"
-set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+restrict_userns
 OUTPUT=$(cd "${WORK}" && env -i \
     PATH="${CASE}/odd dir:${CASE}/sudo:${STUBS}:${BASE}" \
     LOG="${LOG}" PROFILE="${PROFILE}" PROFILE_LOADED="${CASE}/profile-loaded" \
@@ -355,6 +367,19 @@ RC=$?
 check "fails" rc_is 1
 check "says why" output_has "ERROR: Can't write an AppArmor profile for bwrap at '${CASE}/odd dir/bwrap'."
 check "loads no AppArmor profile" not_called_like "apparmor_parser"
+
+new_case "a container that sees the host's AppArmor restriction loads no profile"
+with_pm apt-get
+set_sysctl kernel.apparmor_restrict_unprivileged_userns 1
+: > "${FAKE}/.dockerenv"
+run BWRAP_MODE=container
+check "fails" rc_is 1
+check "installs bubblewrap" called_like "apt-get -qq install"
+check "loads no AppArmor profile" not_called_like "apparmor_parser"
+check "says bwrap can't create namespaces" output_has "ERROR: bwrap can't create the namespaces melange's bubblewrap runner needs, as circleci."
+check "says no profile can be loaded here" output_has "AppArmor restricts unprivileged user namespaces on this kernel, but /sys/kernel/security/apparmor is missing"
+check "says it runs in a container" output_has "This job runs inside a container."
+check "points to a machine executor" output_has "Run melange build on a machine executor."
 
 new_case "a container is named in the error"
 with_bwrap

@@ -10,7 +10,9 @@
 #      (kernel.apparmor_restrict_unprivileged_userns=1), loads an AppArmor
 #      profile that allows them for bwrap only. Without it, bwrap fails with
 #      "setting up uid map: Permission denied". See
-#      https://github.com/chainguard-dev/melange/issues/1508.
+#      https://github.com/chainguard-dev/melange/issues/1508. A container
+#      sees the host's setting but has no AppArmor interface to load a
+#      profile through, so it is left to step 3 to explain.
 #   3. checks, as this job's user, that bwrap can create the namespaces and
 #      mounts melange's bubblewrap runner uses.
 #
@@ -56,6 +58,19 @@ sysctl_value() {
     if [[ -r "${file}" ]]; then
         printf '%s\n' "$(< "${file}")"
     fi
+}
+
+# userns_restricted: succeeds when AppArmor restricts unprivileged user
+# namespaces. /proc/sys shows the host kernel's setting, even in a container.
+userns_restricted() {
+    [[ "$(sysctl_value kernel.apparmor_restrict_unprivileged_userns)" == "1" ]]
+}
+
+# apparmor_loadable: succeeds when AppArmor profiles can be loaded from here,
+# through the securityfs interface apparmor_parser uses. Containers don't
+# have it.
+apparmor_loadable() {
+    [[ -d /sys/kernel/security/apparmor ]]
 }
 
 # bwrap_works: runs bwrap the way melange's bubblewrap runner does, in new
@@ -135,6 +150,10 @@ explain_failure() {
     if [[ "$(sysctl_value kernel.unprivileged_userns_clone)" == "0" ]]; then
         info "kernel.unprivileged_userns_clone is 0, which allows user namespaces only for root."
     fi
+    if userns_restricted && ! apparmor_loadable; then
+        info "AppArmor restricts unprivileged user namespaces on this kernel, but /sys/kernel/security/apparmor is missing," \
+            "so no profile can be loaded from here to allow them."
+    fi
     if [[ -f /.dockerenv || -f /run/.containerenv ]]; then
         info "This job runs inside a container."
     fi
@@ -153,7 +172,7 @@ else
 fi
 
 if ! bwrap_works; then
-    if [[ "$(sysctl_value kernel.apparmor_restrict_unprivileged_userns)" == "1" ]]; then
+    if userns_restricted && apparmor_loadable; then
         allow_userns
     fi
     if ! bwrap_works; then
