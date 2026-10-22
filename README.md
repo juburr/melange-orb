@@ -175,7 +175,7 @@ steps:
 Neither runner can build on the Docker executor, so `melange build` needs a machine executor:
 
 - **`docker` runner**: melange bind-mounts its build workspace, a directory under `/tmp` in the job's container, into the container it builds in. The Docker executor has no Docker daemon of its own, and `setup_remote_docker` starts one on a separate VM that can't see the job's files. The build fails with `invalid mount config for type "bind": bind source path does not exist: /tmp/melange-workspace-…`.
-- **`bubblewrap` runner**: the job runs in an unprivileged container, where `bwrap` can't create the namespaces it needs, even as root (`No permissions to create new namespace`). `setup_bubblewrap` fails there with an error that says so, and CI checks that it does (`setup-bubblewrap-docker-executor-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)).
+- **`bubblewrap` runner**: the job runs in an unprivileged container, where `bwrap` can't set up its sandbox. On CircleCI's Docker executor it stops with `Unexpected capabilities but not setuid, old file caps config?`, and under Docker's default security settings it can't create the namespaces it needs either, even as root. `setup_bubblewrap` fails there with an error that says so, and CI checks that it does (`setup-bubblewrap-docker-executor-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)).
 
 ## 🧰 Commands
 
