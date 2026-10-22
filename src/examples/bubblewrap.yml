@@ -1,0 +1,34 @@
+description: >
+  Build signed APKs with melange's bubblewrap runner on a machine executor.
+  `setup_bubblewrap` installs bubblewrap and allows it to create user
+  namespaces, which needs sudo. Docker executors can't run bubblewrap.
+
+usage:
+  version: 2.1
+  orbs:
+    melange: juburr/melange-orb@1.1
+  jobs:
+    build-apks:
+      machine:
+        image: ubuntu-2404:current
+      resource_class: arm.medium
+      steps:
+        - checkout
+        - melange/install
+        - melange/setup_bubblewrap
+        - run:
+            name: Generate Signing Key
+            command: melange keygen
+        - run:
+            name: Build APKs
+            command: |
+              melange build melange.yaml \
+                --runner bubblewrap \
+                --arch "$(uname -m)" \
+                --signing-key melange.rsa \
+                --source-dir dist \
+                --out-dir packages
+  workflows:
+    build:
+      jobs:
+        - build-apks

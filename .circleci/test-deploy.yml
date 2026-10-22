@@ -81,9 +81,7 @@ jobs:
           condition:
             equal: [bubblewrap, << parameters.runner >>]
           steps:
-            - run:
-                name: Set Up Bubblewrap
-                command: bash tests/smoke/setup_bubblewrap.sh
+            - melange-orb/setup_bubblewrap
       - run:
           name: Generate Signing Key
           command: melange keygen
@@ -102,6 +100,24 @@ jobs:
       - run:
           name: Verify Package
           command: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
+  # bubblewrap can't run in a Docker executor's unprivileged container. This
+  # checks that setup_bubblewrap fails there, with an error that says so,
+  # rather than leaving melange build to fail later.
+  setup-bubblewrap-docker-executor-test:
+    docker:
+      - image: cimg/base:current-22.04
+    steps:
+      - checkout
+      - run:
+          name: Expect setup_bubblewrap to Fail
+          command: |
+            if bash src/scripts/setup_bubblewrap.sh > setup.log 2>&1; then
+              cat setup.log
+              echo "setup_bubblewrap succeeded in a Docker executor; update the README's runner table."
+              exit 1
+            fi
+            cat setup.log
+            grep -F "ERROR: bwrap can't create the namespaces melange's bubblewrap runner needs" setup.log
   # The install contract runs in the setup workflow (config.yml); this checks
   # that parameter values reach circleci env subst on stdin.
   env-subst-test:
@@ -135,6 +151,8 @@ workflows:
               executor: [machine-amd64, machine-arm64]
               runner: [bubblewrap, docker]
           filters: *filters
+      - setup-bubblewrap-docker-executor-test:
+          filters: *filters
       - env-subst-test:
           filters: *filters
       - shell-conventions-test:
@@ -152,6 +170,7 @@ workflows:
             - command-test
             - command-test-arm64
             - build-smoke-test
+            - setup-bubblewrap-docker-executor-test
             - env-subst-test
             - shell-conventions-test
           context: orb-publishing

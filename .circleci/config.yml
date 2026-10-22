@@ -17,11 +17,21 @@ jobs:
       - run:
           name: Run install contract tests
           command: bash tests/install_test.sh
+  test-setup-bubblewrap:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run:
+          name: Run setup_bubblewrap tests
+          command: bash tests/setup_bubblewrap_test.sh
 
 workflows:
   lint-pack:
     jobs:
       - test-install:
+          filters: *filters
+      - test-setup-bubblewrap:
           filters: *filters
       - orb-tools/lint:
           filters: *filters
@@ -36,5 +46,5 @@ workflows:
           pipeline_number: << pipeline.number >>
           vcs_type: << pipeline.project.type >>
           orb_name: melange-orb
-          requires: [test-install, orb-tools/lint, orb-tools/pack, orb-tools/review, shellcheck/check]
+          requires: [test-install, test-setup-bubblewrap, orb-tools/lint, orb-tools/pack, orb-tools/review, shellcheck/check]
           filters: *filters
