@@ -73,6 +73,15 @@ apparmor_loadable() {
     [[ -d /sys/kernel/security/apparmor ]]
 }
 
+# blocked_elsewhere: succeeds when something other than AppArmor is known to
+# stop bwrap, so an AppArmor profile would change the machine without
+# helping.
+blocked_elsewhere() {
+    [[ "${BWRAP_OUTPUT}" == *"Unknown option"* ||
+        "$(sysctl_value user.max_user_namespaces)" == "0" ||
+        "$(sysctl_value kernel.unprivileged_userns_clone)" == "0" ]]
+}
+
 # bwrap_works: runs bwrap the way melange's bubblewrap runner does, in new
 # user and PID namespaces with fresh /dev and /proc mounts, and leaves what
 # it printed in BWRAP_OUTPUT.
@@ -109,17 +118,19 @@ install_bwrap() {
 }
 
 # allow_userns: loads an AppArmor profile that lets the bwrap on the PATH
-# create user namespaces. The profile names the binary's real path, since
-# AppArmor matches the file that runs, not a symlink to it. It is loaded
-# from stdin, so nothing is written to /etc/apparmor.d, and it lasts until
-# the machine reboots.
+# create user namespaces. The profile attaches to the binary's real path,
+# since AppArmor matches the file that runs, not a symlink to it, and is
+# named after it: apparmor_parser -r replaces a profile of the same name, so
+# a shared name would detach the bwrap another job set up at another path.
+# It is loaded from stdin, so nothing is written to /etc/apparmor.d, and it
+# lasts until the machine reboots.
 allow_userns() {
     local bwrap_path
     require_root "allow bwrap to create user namespaces"
     bwrap_path=$(readlink -f "$(command -v bwrap)")
     # The path is written into the profile, so only plain path characters
     # are accepted.
-    if [[ ! "${bwrap_path}" =~ ^/[A-Za-z0-9._+/-]+$ ]]; then
+    if [[ ! "${bwrap_path}" =~ ^/[A-Za-z0-9_.+/-]+$ ]]; then
         die "Can't write an AppArmor profile for bwrap at '${bwrap_path}'."
     fi
     info "AppArmor restricts unprivileged user namespaces. Allowing them for ${bwrap_path}."
@@ -127,7 +138,7 @@ allow_userns() {
         'abi <abi/4.0>,' \
         'include <tunables/global>' \
         '' \
-        "profile melange-orb-bwrap-userns ${bwrap_path} flags=(unconfined) {" \
+        "profile melange-orb-bwrap-userns${bwrap_path} ${bwrap_path} flags=(unconfined) {" \
         '  userns,' \
         '}' | as_root apparmor_parser -r; then
         die "Could not load the AppArmor profile that allows bwrap to create user namespaces."
@@ -172,7 +183,7 @@ else
 fi
 
 if ! bwrap_works; then
-    if userns_restricted && apparmor_loadable; then
+    if userns_restricted && apparmor_loadable && ! blocked_elsewhere; then
         allow_userns
     fi
     if ! bwrap_works; then

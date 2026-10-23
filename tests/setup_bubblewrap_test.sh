@@ -180,7 +180,7 @@ cat > "${STUBS}/apparmor_parser" << 'EOF'
 echo "apparmor_parser $*" >> "${LOG}"
 cat > "${PROFILE}"
 if [[ -n "${APPARMOR_FAILS:-}" ]]; then
-    echo "apparmor_parser: Unable to replace \"melange-orb-bwrap-userns\". Permission denied" >&2
+    echo "apparmor_parser: Unable to replace the profile. Permission denied" >&2
     exit 1
 fi
 : > "${PROFILE_LOADED}"
@@ -308,18 +308,18 @@ run BWRAP_MODE=apparmor
 check "succeeds" rc_is 0
 check "loads the profile through sudo -n" called "sudo -n apparmor_parser -r"
 check "profile uses the AppArmor 4 ABI" profile_has "abi <abi/4.0>,"
-check "profile attaches to bwrap" profile_has "profile melange-orb-bwrap-userns ${CASE}/installed/bwrap flags=(unconfined) {"
+check "profile is named after bwrap's path and attaches to it" profile_has "profile melange-orb-bwrap-userns${CASE}/installed/bwrap ${CASE}/installed/bwrap flags=(unconfined) {"
 check "profile allows user namespaces" profile_has "  userns,"
 check "reports bwrap ready" output_has "is ready for melange build --runner bubblewrap."
 
 new_case "AppArmor profile names bwrap's real path, not a symlink"
-mkdir -p "${CASE}/real"
-cp "${WORK}/bwrap" "${CASE}/real/bwrap"
-ln -s "${CASE}/real/bwrap" "${CASE}/installed/bwrap"
+mkdir -p "${CASE}/real_bin"
+cp "${WORK}/bwrap" "${CASE}/real_bin/bwrap"
+ln -s "${CASE}/real_bin/bwrap" "${CASE}/installed/bwrap"
 restrict_userns
 run BWRAP_MODE=apparmor
 check "succeeds" rc_is 0
-check "profile attaches to the real path" profile_has "profile melange-orb-bwrap-userns ${CASE}/real/bwrap flags=(unconfined) {"
+check "profile is named after the real path and attaches to it" profile_has "profile melange-orb-bwrap-userns${CASE}/real_bin/bwrap ${CASE}/real_bin/bwrap flags=(unconfined) {"
 
 new_case "a newly installed bwrap gets the AppArmor profile too"
 with_pm apt-get
@@ -338,6 +338,20 @@ check "loads no AppArmor profile" not_called_like "apparmor_parser"
 check "says bwrap can't create namespaces" output_has "ERROR: bwrap can't create the namespaces melange's bubblewrap runner needs, as circleci."
 check "shows bwrap's output" output_has "  bwrap: setting up uid map: Permission denied"
 check "doesn't blame AppArmor" output_lacks "AppArmor restricts"
+
+for blocker in "user.max_user_namespaces=0:container" "kernel.unprivileged_userns_clone=0:container" "old bwrap:old"; do
+    new_case "no AppArmor profile when bwrap fails for another reason: ${blocker%%:*}"
+    with_bwrap
+    restrict_userns
+    if [[ "${blocker}" == *=* ]]; then
+        setting=${blocker%%:*}
+        set_sysctl "${setting%=*}" "${setting#*=}"
+    fi
+    run BWRAP_MODE="${blocker#*:}"
+    check "fails" rc_is 1
+    check "loads no AppArmor profile" not_called_like "apparmor_parser"
+    check "says bwrap can't create namespaces" output_has "ERROR: bwrap can't create the namespaces melange's bubblewrap runner needs, as circleci."
+done
 
 new_case "a profile that can't be loaded fails the step"
 with_bwrap
