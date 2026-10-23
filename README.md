@@ -94,7 +94,7 @@ Add the orb, call `melange/install`, then use the `melange` CLI directly in late
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@1.0.0
+  melange: juburr/melange-orb@1.1.0
 
 jobs:
   build-apks:
@@ -203,6 +203,8 @@ Prepares a Linux machine executor for `melange build --runner bubblewrap`. It ta
 Installing a package and loading a profile need root. The command runs them directly as root, or through `sudo -n` otherwise, which never prompts for a password. CircleCI's machine executors allow passwordless `sudo`. The Docker executor can't run bubblewrap at all, so the command fails there (see [Why Not the Docker Executor?](#why-not-the-docker-executor)). On a system with another package manager, install `bubblewrap` in an earlier step and the command does the rest.
 
 ## 📦 Upgrading
+
+Upgrading from v1.0.0 to v1.1.0? Nothing changes for existing pipelines. v1.1.0 adds the [`setup_bubblewrap`](#melangesetup_bubblewrap) command.
 
 Upgrading from 0.1.0 to v1.0.0? No parameters were renamed, but `install` changed.
 
