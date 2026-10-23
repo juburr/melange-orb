@@ -1,0 +1,13 @@
+description: >
+  Prepares a Linux machine executor for melange's bubblewrap runner, so
+  `melange build --runner bubblewrap` can create its build environment.
+  Installs bubblewrap with the system package manager when it is missing,
+  and on Ubuntu 23.10 and newer, where AppArmor restricts unprivileged user
+  namespaces, loads an AppArmor profile that allows them for bwrap only.
+  Changes need root and use passwordless sudo when the job's user isn't
+  root; nothing is changed when bwrap already works. Docker executors can't
+  run bubblewrap, so this command fails there.
+steps:
+  - run:
+      name: Set up bubblewrap for melange
+      command: << include(scripts/setup_bubblewrap.sh) >>

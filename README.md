@@ -8,7 +8,7 @@
 
 Install [melange](https://github.com/chainguard-dev/melange) with one step of CircleCI config, then build APKs from declarative YAML pipelines<br>
 and hand them to [apko](https://github.com/chainguard-dev/apko) to assemble minimal, distroless container images.<br>
-Strict SHA-512 verification by default · No `sudo` · No usage data collected by the orb
+Strict SHA-512 verification by default · Installs without `sudo` · No usage data collected by the orb
 
 [![CircleCI Build Status](https://circleci.com/gh/juburr/melange-orb.svg?style=shield "CircleCI Build Status")](https://circleci.com/gh/juburr/melange-orb)
 [![CircleCI Orb Version](https://badges.circleci.com/orbs/juburr/melange-orb.svg)](https://circleci.com/developer/orbs/orb/juburr/melange-orb)
@@ -18,7 +18,7 @@ Strict SHA-512 verification by default · No `sudo` · No usage data collected b
 ![Builds tested with the docker and bubblewrap runners](https://img.shields.io/badge/runners-docker%20%7C%20bubblewrap-7C3AED?style=for-the-badge)
 ![amd64 and arm64 executors](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-0EA5E9?style=for-the-badge&logo=linux&logoColor=white)
 ![SHA-512 verified by default](https://img.shields.io/badge/SHA--512-strict%20by%20default-16A34A?style=for-the-badge)
-![No sudo required](https://img.shields.io/badge/sudo-not%20required-DB2777?style=for-the-badge)
+![melange installs without sudo](https://img.shields.io/badge/install-no%20sudo-DB2777?style=for-the-badge)
 
 **[Quick Start](#-quick-start)** · **[Features](#-why-melange-orb)** · **[Building Packages](#-building-packages)** · **[Commands](#-commands)** · **[Checksums](#-checksum-verification)** · **[Security](#-secure-by-design)**
 
@@ -55,8 +55,8 @@ The matching Linux build is picked automatically, including on CircleCI's <code>
 Checksums for melange releases from <code>0.1.0</code> up to the orb's pinned default, on both architectures. Pick yours with <code>version</code>.
 </td>
 <td width="33%" valign="top">
-🙅 <b>No sudo, no telemetry</b><br><br>
-melange installs to a user-owned directory, and nothing in this orb runs as root. No usage data of any kind is collected or sent back to the orb developer.
+🙅 <b>Rootless install, no telemetry</b><br><br>
+melange installs to a user-owned directory without root. Only the opt-in <code>setup_bubblewrap</code> command uses <code>sudo</code>. No usage data of any kind is collected or sent back to the orb developer.
 </td>
 </tr>
 </table>
@@ -94,7 +94,7 @@ Add the orb, call `melange/install`, then use the `melange` CLI directly in late
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@1.0.0
+  melange: juburr/melange-orb@1.1.0
 
 jobs:
   build-apks:
@@ -129,7 +129,7 @@ That's it. Swap in your own `melange.yaml` and the directory your package's sour
 > Upgrading from 0.1.0? `install` now refuses melange versions it has no checksum for, and creates `install_path` and puts it on the `PATH` for you. See [Upgrading](#-upgrading).
 
 > [!NOTE]
-> Run `melange build` on a machine executor, as above. The `docker` runner needs a local Docker daemon, and `setup_remote_docker` runs the daemon on a separate host that can't mount the job's files.
+> Run `melange build` on a machine executor, as above. Neither runner works on the Docker executor: see [Why Not the Docker Executor?](#why-not-the-docker-executor)
 
 ## 🏭 Building Packages
 
@@ -148,12 +148,34 @@ Next, assemble an image: the companion [apko orb](https://github.com/juburr/apko
 | Runner | Result | Setup |
 | --- | --- | --- |
 | `docker` (recommended) | ✅ Works on amd64 and arm64 | None. The `circleci` user can already use the machine's Docker daemon. No images are pulled; melange builds the build environment locally. |
-| `bubblewrap` (melange's default on Linux) | ⚠️ Works on amd64 and arm64 after setup | Requires `sudo`: install `bubblewrap`, and allow it to create user namespaces. Without the second step it fails with `bwrap: setting up uid map: Permission denied`, because Ubuntu 24.04's AppArmor restricts unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns = 1`). See [`tests/smoke/setup_bubblewrap.sh`](tests/smoke/setup_bubblewrap.sh). |
+| `bubblewrap` (melange's default on Linux) | ✅ Works on amd64 and arm64 after `melange/setup_bubblewrap` | Add [`melange/setup_bubblewrap`](#melangesetup_bubblewrap), which uses `sudo`. It installs `bubblewrap` and allows it to create user namespaces, which Ubuntu 24.04's AppArmor restricts (`kernel.apparmor_restrict_unprivileged_userns = 1`). Without that, the build fails with `bwrap: setting up uid map: Permission denied`. |
 | `qemu` | ❌ Not usable | Needs `/dev/kvm`, which machine executors don't provide. |
 
-Pass `--runner` explicitly. If it is omitted on Linux, melange tries `bubblewrap` and fails unless the setup above has been done.
+Pass `--runner` explicitly. If it is omitted on Linux, melange tries `bubblewrap` and fails unless `setup_bubblewrap` has run.
 
-The Docker executor is not covered by these tests and isn't recommended for `melange build`. The `docker` runner needs a local Docker daemon: `setup_remote_docker` runs the daemon on a separate host that can't mount the job's files. The `bubblewrap` runner needs to create user namespaces inside the job's container.
+The `docker` runner needs no setup and no `sudo`, so it is the simpler choice on CircleCI. Use `bubblewrap` when the machine has no Docker daemon, such as a self-hosted machine runner without Docker, or to build the way melange does by default. Add `setup_bubblewrap` after `install` and pass `--runner bubblewrap`:
+
+```yaml
+steps:
+  - checkout
+  - melange/install
+  - melange/setup_bubblewrap
+  - run: melange keygen
+  - run: |
+      melange build melange.yaml \
+        --runner bubblewrap \
+        --arch "$(uname -m)" \
+        --signing-key melange.rsa \
+        --source-dir dist \
+        --out-dir packages
+```
+
+### Why Not the Docker Executor?
+
+Neither runner can build on the Docker executor, so `melange build` needs a machine executor:
+
+- **`docker` runner**: melange bind-mounts its build workspace, a directory under `/tmp` in the job's container, into the container it builds in. The Docker executor has no Docker daemon of its own, and `setup_remote_docker` starts one on a separate VM that can't see the job's files. The build fails with `invalid mount config for type "bind": bind source path does not exist: /tmp/melange-workspace-…`.
+- **`bubblewrap` runner**: the job runs in an unprivileged container, where `bwrap` can't set up its sandbox. On CircleCI's Docker executor it stops with `Unexpected capabilities but not setuid, old file caps config?`, and under Docker's default security settings it can't create the namespaces it needs either, even as root. `setup_bubblewrap` fails there with an error that says so, and CI checks that it does (`setup-bubblewrap-docker-executor-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)).
 
 ## 🧰 Commands
 
@@ -170,7 +192,19 @@ Installs melange for Linux on amd64 or arm64, matching the executor's CPU. In th
 
 Environment variables are expanded in `version` and `install_path`.
 
+### `melange/setup_bubblewrap`
+
+Prepares a Linux machine executor for `melange build --runner bubblewrap`. It takes no parameters, and changes nothing when `bwrap` already works:
+
+1. Installs `bubblewrap` with the system package manager (`apt-get`, `dnf`, `yum`, `zypper` or `apk`) if `bwrap` isn't on the `PATH`.
+2. If `bwrap` can't create a user namespace because AppArmor restricts unprivileged ones, as on Ubuntu 23.10 and newer, loads an AppArmor profile that allows them for that `bwrap` alone. It is named after the binary's path, such as `melange-orb-bwrap-userns/usr/bin/bwrap`. The rest of the system keeps the restriction. The profile is loaded until the machine reboots, and nothing is written to `/etc/apparmor.d`. This is the fix from [melange#1508](https://github.com/chainguard-dev/melange/issues/1508). No profile is loaded when something else is known to stop `bwrap`: user namespaces turned off (`user.max_user_namespaces` or `kernel.unprivileged_userns_clone` is `0`), or a `bwrap` too old for melange.
+3. Checks, as the job's user, that `bwrap` can create the namespaces and the `/proc` mount melange's runner uses, and fails with an explanation if it can't.
+
+Installing a package and loading a profile need root. The command runs them directly as root, or through `sudo -n` otherwise, which never prompts for a password. CircleCI's machine executors allow passwordless `sudo`. The Docker executor can't run bubblewrap at all, so the command fails there (see [Why Not the Docker Executor?](#why-not-the-docker-executor)). On a system with another package manager, install `bubblewrap` in an earlier step and the command does the rest.
+
 ## 📦 Upgrading
+
+Upgrading from v1.0.0 to v1.1.0? Nothing changes for existing pipelines. v1.1.0 adds the [`setup_bubblewrap`](#melangesetup_bubblewrap) command.
 
 Upgrading from 0.1.0 to v1.0.0? No parameters were renamed, but `install` changed.
 
@@ -183,9 +217,9 @@ Behavior changes:
 
 ## 🔒 Secure by Design
 
-- **Least Privilege**: Installs to a user-owned directory by default, with no `sudo` usage anywhere in this orb.
+- **Least Privilege**: `install` puts melange in a user-owned directory and never uses `sudo`. Only `setup_bubblewrap`, which you add for the bubblewrap runner, runs commands as root: the package manager, and `apparmor_parser` to allow user namespaces for `bwrap` alone instead of lifting the restriction for every program.
 - **Integrity**: SHA-512 checksum validation of downloaded binaries, on by default and failing closed: a melange version this orb has no checksum for is refused, not installed unverified, and a binary that can't run on the executor never replaces an existing install. See [Checksum Verification](#-checksum-verification) for the `known_versions` and `false` opt-outs.
-- **Provenance**: Installs directly from melange's official [releases page](https://github.com/chainguard-dev/melange/releases/) on GitHub. No third-party websites, domains, or proxies are used.
+- **Provenance**: Installs directly from melange's official [releases page](https://github.com/chainguard-dev/melange/releases/) on GitHub. No third-party websites, domains, or proxies are used. `setup_bubblewrap` installs bubblewrap from the package repositories the executor is already configured with.
 - **Confidentiality**: All secrets and environment variables are handled in accordance with CircleCI's [security recommendations](https://circleci.com/docs/security-recommendations/) and [best practices](https://circleci.com/docs/orbs-best-practices/).
 - **Privacy**: No usage data of any kind is collected or shipped back to the orb developer.
 
@@ -269,13 +303,15 @@ Hosts to allow (HTTPS, port 443) when running on a locked-down or self-hosted ru
 
 The `docker` runner pulls no container images, since melange builds the build environment locally, so it needs no registry access.
 
+`setup_bubblewrap` downloads nothing itself. When `bubblewrap` isn't installed, the package manager fetches it from the repositories the machine is configured with. On Ubuntu those are its archive mirrors, by default `archive.ubuntu.com` and `security.ubuntu.com` (`ports.ubuntu.com` on arm64), usually over HTTP on port 80. `apt-get update` also contacts every other repository in the machine's sources, but the install carries on if those fail.
+
 ## 🤝 Contributing
 
 This is an unofficial, community-maintained orb, and contributions are welcome! Bug reports, feature ideas and pull requests all help.
 
 - **Found a bug or have an idea?** [Open an issue](https://github.com/juburr/melange-orb/issues).
 - **Need a newer melange release?** Generate its checksums with `src/scripts/install_hash.sh -v <version>`, paste them into the `sha512sums` table in [`src/scripts/install.sh`](src/scripts/install.sh), and open a pull request. The script downloads the amd64 and arm64 tarballs, checks them against the SHA-256 checksums melange publishes with the release (`checksums.txt`), and prints one lookup table entry per architecture. It needs bash 4 or newer, `curl`, `awk`, `sed`, `tar`, `gzip` and the standard coreutils, including `mktemp`, `sha256sum` and `sha512sum`. For a release with nothing published to check against, `-c` takes a checksum from another official source (a SHA-1 one also needs `sha1sum`), or `NONE`; it never overrides what the release did publish.
-- **Before opening a pull request**, run `yamllint .`, `shellcheck src/scripts/*.sh`, `bash tests/install_test.sh`, `bash tests/env_subst_test.sh` and `bash tests/shell_conventions_test.sh`. The install tests stub out the network, so they run anywhere.
+- **Before opening a pull request**, run `yamllint .`, `shellcheck src/scripts/*.sh`, `bash tests/install_test.sh`, `bash tests/setup_bubblewrap_test.sh`, `bash tests/env_subst_test.sh` and `bash tests/shell_conventions_test.sh`. The install tests stub out the network, and the setup_bubblewrap tests stub out `sudo`, the package managers and `bwrap`, so they run anywhere without changing the machine.
 
 CI lints and packs the orb, runs ShellCheck, and runs the install and build smoke tests on amd64 and arm64 before any release is published.
 
