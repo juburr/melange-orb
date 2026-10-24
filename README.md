@@ -218,7 +218,7 @@ Installs melange for Linux on amd64 or arm64, matching the executor's CPU. In th
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `version` | `0.61.2` | melange release to install; a leading `v` is ignored. Pin it so melange only changes when you decide to. Values that aren't a release version, such as `latest`, are rejected. |
+| `version` | `0.63.1` | melange release to install; a leading `v` is ignored. Pin it so melange only changes when you decide to. Values that aren't a release version, such as `latest`, are rejected. |
 | `install_path` | `$HOME/bin` | Absolute path of the directory to install the `melange` binary into, writable without root. Created if needed, and added to `PATH` for later steps when it isn't already on it. A leading `~/` is expanded. |
 | `verify_checksums` | `strict` | `strict`, `known_versions` or `false`. See [Checksum Verification](#-checksum-verification). |
 | `caching` | `true` | Cache the downloaded release tarball between jobs, keyed by melange version, CPU architecture and home directory. Only verified tarballs are cached, and they are verified again when restored. |
@@ -263,7 +263,7 @@ The actions are composite actions in [`actions/`](actions), next to the orb's so
 
 ## 📦 Upgrading
 
-Upgrading from v1.1.0 to v1.2.0? Nothing changes for CircleCI pipelines. v1.2.0 adds [GitHub Actions](#-github-actions) for both commands.
+Upgrading from v1.1.0 to v1.2.0? The default `version` is now melange 0.63.1 (it was 0.61.2), and the checksum table covers every release up to it. Set `version: 0.61.2` to stay on the old default. Nothing else changes for CircleCI pipelines: v1.2.0 also adds [GitHub Actions](#-github-actions) for both commands.
 
 Upgrading from v1.0.0 to v1.1.0? Nothing changes for existing pipelines. v1.1.0 adds the [`setup_bubblewrap`](#melangesetup_bubblewrap) command.
 

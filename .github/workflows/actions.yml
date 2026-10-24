@@ -54,7 +54,7 @@ jobs:
           ELF: ${{ matrix.elf }}
         run: |
           [[ "$(command -v melange)" == "${HOME}/bin/melange" ]]
-          melange version | grep -F 'v0.61.2'
+          melange version | grep -F 'v0.63.1'
           od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx "${ELF}"
       # The first install saved the release to the cache, so this one
       # restores it. It goes to a directory of its own, which later steps
@@ -67,7 +67,7 @@ jobs:
           SECOND: ${{ runner.temp }}/second
         run: |
           [[ "$(command -v melange)" == "${SECOND}/melange" ]]
-          melange version | grep -F 'v0.61.2'
+          melange version | grep -F 'v0.63.1'
       - name: Install an unlisted version, which must fail
         id: unlisted
         continue-on-error: true
@@ -102,7 +102,7 @@ jobs:
           fi
       - uses: ./actions/install
       - name: Verify the install
-        run: melange version | grep -F 'v0.61.2'
+        run: melange version | grep -F 'v0.63.1'
 
   # Runs what a workflow does after install: generate a signing key, then
   # build a signed APK for the runner's own architecture that packages a

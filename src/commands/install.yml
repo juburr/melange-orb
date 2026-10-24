@@ -30,9 +30,9 @@ parameters:
       verification and is not recommended.
   version:
     type: string
-    default: "0.61.2"
+    default: "0.63.1"
     description: >
-      Version of melange to install, such as 0.61.2. A leading "v" is
+      Version of melange to install, such as 0.63.1. A leading "v" is
       ignored, and environment variables are expanded.
 steps:
   - when:

@@ -30,9 +30,9 @@ inputs:
     default: strict
   version:
     description: >
-      Version of melange to install, such as 0.61.2. A leading "v" is
+      Version of melange to install, such as 0.63.1. A leading "v" is
       ignored.
-    default: "0.61.2"
+    default: "0.63.1"
 
 runs:
   using: composite

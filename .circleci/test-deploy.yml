@@ -42,7 +42,7 @@ jobs:
           name: Verify Install
           command: |
             command -v melange
-            melange version | grep -F 'v0.61.2'
+            melange version | grep -F 'v0.63.1'
             # e_machine field of the ELF header: 3e00 is x86-64.
             od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx '3e00'
   command-test-arm64:
@@ -54,7 +54,7 @@ jobs:
           name: Verify Install
           command: |
             command -v melange
-            melange version | grep -F 'v0.61.2'
+            melange version | grep -F 'v0.63.1'
             # e_machine field of the ELF header: b700 is aarch64.
             od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx 'b700'
   # Runs what a pipeline does after install: generate a signing key, then build a
