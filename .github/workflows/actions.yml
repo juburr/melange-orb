@@ -38,10 +38,11 @@ jobs:
       matrix:
         include:
           # e_machine field of the ELF header: 3e00 is x86-64, b700 is aarch64.
+          # Quoted, since YAML reads an unquoted 3e00 as the number 3.
           - runner: ubuntu-24.04
-            elf: 3e00
+            elf: "3e00"
           - runner: ubuntu-24.04-arm
-            elf: b700
+            elf: "b700"
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
