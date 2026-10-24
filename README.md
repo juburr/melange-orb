@@ -2,27 +2,29 @@
 
 <img src="assets/logos/melange-orb-512px.png" width="256" alt="Melange Orb logo: a mermaid singing into a microphone on a coral reef, beneath a container ship stacked with colorful shipping containers">
 
-# Melange Orb for CircleCI
+# Melange for CircleCI and GitHub Actions
 
-### Build signed APK packages for your distroless images, right inside your CircleCI pipeline.
+### Build signed APK packages for your distroless images, right inside your CircleCI pipeline or GitHub workflow.
 
-Install [melange](https://github.com/chainguard-dev/melange) with one step of CircleCI config, then build APKs from declarative YAML pipelines<br>
+Install [melange](https://github.com/chainguard-dev/melange) with one step, an orb command or a GitHub Action, then build APKs from declarative YAML pipelines<br>
 and hand them to [apko](https://github.com/chainguard-dev/apko) to assemble minimal, distroless container images.<br>
-Strict SHA-512 verification by default · Installs without `sudo` · No usage data collected by the orb · Also available as [GitHub Actions](#-github-actions)
+Strict SHA-512 verification by default · Installs without `sudo` · No usage data collected
 
 [![CircleCI Build Status](https://circleci.com/gh/juburr/melange-orb.svg?style=shield "CircleCI Build Status")](https://circleci.com/gh/juburr/melange-orb)
+[![GitHub Actions Status](https://github.com/juburr/melange-orb/actions/workflows/actions.yml/badge.svg?branch=master "GitHub Actions Status")](https://github.com/juburr/melange-orb/actions/workflows/actions.yml)
 [![CircleCI Orb Version](https://badges.circleci.com/orbs/juburr/melange-orb.svg)](https://circleci.com/developer/orbs/orb/juburr/melange-orb)
 [![GitHub License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 [![CircleCI Community](https://img.shields.io/badge/community-CircleCI%20Discuss-343434.svg)](https://discuss.circleci.com/c/ecosystem/orbs)
 
+![CircleCI orb and GitHub Actions](https://img.shields.io/badge/CI-CircleCI%20%7C%20GitHub%20Actions-F97316?style=for-the-badge)
 ![Builds tested with the docker and bubblewrap runners](https://img.shields.io/badge/runners-docker%20%7C%20bubblewrap-7C3AED?style=for-the-badge)
-![amd64 and arm64 executors](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-0EA5E9?style=for-the-badge&logo=linux&logoColor=white)
+![amd64 and arm64 executors and runners](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-0EA5E9?style=for-the-badge&logo=linux&logoColor=white)
 ![SHA-512 verified by default](https://img.shields.io/badge/SHA--512-strict%20by%20default-16A34A?style=for-the-badge)
 ![melange installs without sudo](https://img.shields.io/badge/install-no%20sudo-DB2777?style=for-the-badge)
 
-**[Quick Start](#-quick-start)** · **[Features](#-why-melange-orb)** · **[Building Packages](#-building-packages)** · **[Commands](#-commands)** · **[GitHub Actions](#-github-actions)** · **[Checksums](#-checksum-verification)** · **[Security](#-secure-by-design)**
+**[Quick Start](#-quick-start)** · **[Features](#-why-melange-orb)** · **[Building Packages](#-building-packages)** · **[CircleCI Commands](#-circleci-commands)** · **[GitHub Actions](#-github-actions)** · **[Checksums](#-checksum-verification)** · **[Security](#-secure-by-design)**
 
-<sub>An unofficial, community-maintained orb. [Contributions are welcome!](#-contributing)</sub>
+<sub>An unofficial, community-maintained CircleCI orb and set of GitHub Actions. [Contributions are welcome!](#-contributing)</sub>
 
 </div>
 
@@ -34,7 +36,7 @@ Strict SHA-512 verification by default · Installs without `sudo` · No usage da
 <tr>
 <td width="33%" valign="top">
 🔐 <b>Verified, fail-closed installs</b><br><br>
-Every melange binary comes straight from melange's official GitHub releases and is checked against a SHA-512 checksum pinned in this orb. By default, a version without a known checksum fails before anything is downloaded.
+Every melange binary comes straight from melange's official GitHub releases and is checked against a SHA-512 checksum pinned in this repository. By default, a version without a known checksum fails before anything is downloaded.
 </td>
 <td width="33%" valign="top">
 🐙 <b>Made for apko</b><br><br>
@@ -42,21 +44,21 @@ Every melange binary comes straight from melange's official GitHub releases and 
 </td>
 <td width="33%" valign="top">
 🧪 <b>Tested end to end</b><br><br>
-Every change builds and verifies a signed APK on amd64 and arm64, with both the <code>docker</code> and <code>bubblewrap</code> runners. See <a href="#choosing-a-runner">Choosing a Runner</a>.
+Every change builds and verifies a signed APK on amd64 and arm64, with both the <code>docker</code> and <code>bubblewrap</code> runners, on CircleCI and on GitHub's runners. See <a href="#choosing-a-runner">Choosing a Runner</a>.
 </td>
 </tr>
 <tr>
 <td width="33%" valign="top">
 🦾 <b>amd64 and arm64</b><br><br>
-The matching Linux build is picked automatically, including on CircleCI's <code>arm.medium</code> machines, and cached per version and architecture so repeat jobs skip the download. Cached copies are verified too.
+The matching Linux build is picked automatically, including on CircleCI's <code>arm.medium</code> machines and GitHub's <code>ubuntu-24.04-arm</code> runners, and cached per version and architecture so repeat jobs skip the download. Cached copies are verified too.
 </td>
 <td width="33%" valign="top">
 📌 <b>200+ releases covered</b><br><br>
-Checksums for melange releases from <code>0.1.0</code> up to the orb's pinned default, on both architectures. Pick yours with <code>version</code>.
+Checksums for melange releases from <code>0.1.0</code> up to the pinned default, on both architectures. Pick yours with <code>version</code>.
 </td>
 <td width="33%" valign="top">
 🙅 <b>Rootless install, no telemetry</b><br><br>
-melange installs to a user-owned directory without root. Only the opt-in <code>setup_bubblewrap</code> command uses <code>sudo</code>. No usage data of any kind is collected or sent back to the orb developer.
+melange installs to a user-owned directory without root. Only the opt-in <code>setup_bubblewrap</code> step uses <code>sudo</code>. No usage data of any kind is collected or sent back to the developer.
 </td>
 </tr>
 </table>
@@ -84,11 +86,15 @@ flowchart LR
     class stop bad
 ```
 
-`melange/install` downloads melange straight from its official GitHub releases, verifies its SHA-512 checksum in the default `strict` mode shown here, and puts it on `PATH`. See [Checksum Verification](#-checksum-verification) for the other modes. From there you run the `melange` CLI yourself: `melange keygen` creates a signing key pair, and `melange build` runs your package's pipeline in an isolated build environment and writes signed APKs and a signed `APKINDEX.tar.gz` to `packages/<arch>/`, ready for apko to install from.
+`melange/install`, or the `install` action on GitHub, downloads melange straight from its official GitHub releases, verifies its SHA-512 checksum in the default `strict` mode shown here, and puts it on `PATH`. See [Checksum Verification](#-checksum-verification) for the other modes. From there you run the `melange` CLI yourself: `melange keygen` creates a signing key pair, and `melange build` runs your package's pipeline in an isolated build environment and writes signed APKs and a signed `APKINDEX.tar.gz` to `packages/<arch>/`, ready for apko to install from.
 
 ## 🚀 Quick Start
 
-Add the orb, call `melange/install`, then use the `melange` CLI directly in later steps. This orb only installs melange, so every `melange` flag is yours to use.
+Install melange in one step, then use the `melange` CLI directly in later steps. Only melange is installed, so every `melange` flag is yours to use. In either example, swap in your own `melange.yaml` and the directory your package's sources or prebuilt files live in (`--source-dir`), and `packages/<arch>/` holds your signed APKs and a signed `APKINDEX.tar.gz`, ready for apko. See [Building Packages](#-building-packages) for what each flag does and how to pick a runner.
+
+### CircleCI
+
+Add the orb and call `melange/install`:
 
 ```yaml
 version: 2.1
@@ -123,17 +129,44 @@ workflows:
       - build-apks
 ```
 
-That's it. Swap in your own `melange.yaml` and the directory your package's sources or prebuilt files live in (`--source-dir`), and `packages/<arch>/` holds your signed APKs and a signed `APKINDEX.tar.gz`, ready for apko. See [Building Packages](#-building-packages) for what each flag does and how to pick a runner.
-
-> [!TIP]
-> Upgrading from 0.1.0? `install` now refuses melange versions it has no checksum for, and creates `install_path` and puts it on the `PATH` for you. See [Upgrading](#-upgrading).
-
 > [!NOTE]
 > Run `melange build` on a machine executor, as above. Neither runner works on the Docker executor: see [Why Not the Docker Executor?](#why-not-the-docker-executor)
 
+> [!TIP]
+> Upgrading the orb from 0.1.0? `install` now refuses melange versions it has no checksum for, and creates `install_path` and puts it on the `PATH` for you. See [Upgrading](#-upgrading).
+
+### GitHub Actions
+
+Use the `install` action:
+
+```yaml
+name: Build APKs
+
+on: push
+
+jobs:
+  build-apks:
+    runs-on: ubuntu-24.04-arm # or ubuntu-24.04 for amd64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: juburr/melange-orb/actions/install@v1.2.0
+      - name: Generate signing key
+        run: melange keygen # writes melange.rsa and melange.rsa.pub
+      - name: Build APKs
+        run: |
+          melange build melange.yaml \
+            --runner docker \
+            --arch "$(uname -m)" \
+            --signing-key melange.rsa \
+            --source-dir dist \
+            --out-dir packages
+```
+
+See [GitHub Actions](#-github-actions) for how the actions map to the orb's commands.
+
 ## 🏭 Building Packages
 
-The [Quick Start](#-quick-start) job is the same flow this orb's own CI runs on every change, on amd64 and arm64 machine executors (see `build-smoke-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)). It generates a signing key, then builds a package that copies a prebuilt binary into a signed APK for the machine's own architecture.
+The [Quick Start](#-quick-start) jobs are the same flow CI runs on every change, on amd64 and arm64: on CircleCI's machine executors (`build-smoke-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)) and on GitHub's runners (`build-smoke` in [`.github/workflows/actions.yml`](.github/workflows/actions.yml)). It generates a signing key, then builds a package that copies a prebuilt binary into a signed APK for the machine's own architecture.
 
 - `--arch "$(uname -m)"` builds only for the machine's own architecture. Without it, melange builds every architecture the package supports, and building for foreign architectures needs emulation.
 - Packages are written to `packages/<arch>/` (`x86_64` or `aarch64`) along with an `APKINDEX.tar.gz` signed by `melange.rsa`. apko can then use the directory as a local repository, with `melange.rsa.pub` as the trusted key.
@@ -177,7 +210,7 @@ Neither runner can build on the Docker executor, so `melange build` needs a mach
 - **`docker` runner**: melange bind-mounts its build workspace, a directory under `/tmp` in the job's container, into the container it builds in. The Docker executor has no Docker daemon of its own, and `setup_remote_docker` starts one on a separate VM that can't see the job's files. The build fails with `invalid mount config for type "bind": bind source path does not exist: /tmp/melange-workspace-…`.
 - **`bubblewrap` runner**: the job runs in an unprivileged container, where `bwrap` can't set up its sandbox. On CircleCI's Docker executor it stops with `Unexpected capabilities but not setuid, old file caps config?`, and under Docker's default security settings it can't create the namespaces it needs either, even as root. `setup_bubblewrap` fails there with an error that says so, and CI checks that it does (`setup-bubblewrap-docker-executor-test` in [`.circleci/test-deploy.yml`](.circleci/test-deploy.yml)).
 
-## 🧰 Commands
+## 🧰 CircleCI Commands
 
 ### `melange/install`
 
@@ -204,31 +237,18 @@ Installing a package and loading a profile need root. The command runs them dire
 
 ## ⚡ GitHub Actions
 
-Both commands also come as GitHub Actions, for workflows on GitHub. They run the same scripts as the orb, so they install and verify melange the same way, and take the same inputs with the same defaults.
+Each of the orb's commands has a GitHub Action of the same name. The actions run the same scripts as the orb, so they install and verify melange the same way, and take the same inputs with the same defaults.
 
 | Action | Orb command | Inputs |
 | --- | --- | --- |
 | `juburr/melange-orb/actions/install` | [`melange/install`](#melangeinstall) | `version`, `install_path`, `verify_checksums`, `caching` |
 | `juburr/melange-orb/actions/setup_bubblewrap` | [`melange/setup_bubblewrap`](#melangesetup_bubblewrap) | None |
 
+The [Quick Start](#github-actions) shows a complete workflow. To build with the bubblewrap runner instead of docker, add the setup step after the install and pass `--runner bubblewrap`:
+
 ```yaml
-jobs:
-  build-apks:
-    runs-on: ubuntu-24.04-arm # or ubuntu-24.04 for amd64
-    steps:
-      - uses: actions/checkout@v7
       - uses: juburr/melange-orb/actions/install@v1.2.0
       - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.2.0
-      - name: Generate signing key
-        run: melange keygen
-      - name: Build APKs
-        run: |
-          melange build melange.yaml \
-            --runner bubblewrap \
-            --arch "$(uname -m)" \
-            --signing-key melange.rsa \
-            --source-dir dist \
-            --out-dir packages
 ```
 
 How they differ from the orb's commands:
