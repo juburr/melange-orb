@@ -8,7 +8,7 @@
 
 Install [melange](https://github.com/chainguard-dev/melange) with one step of CircleCI config, then build APKs from declarative YAML pipelines<br>
 and hand them to [apko](https://github.com/chainguard-dev/apko) to assemble minimal, distroless container images.<br>
-Strict SHA-512 verification by default · Installs without `sudo` · No usage data collected by the orb
+Strict SHA-512 verification by default · Installs without `sudo` · No usage data collected by the orb · Also available as [GitHub Actions](#-github-actions)
 
 [![CircleCI Build Status](https://circleci.com/gh/juburr/melange-orb.svg?style=shield "CircleCI Build Status")](https://circleci.com/gh/juburr/melange-orb)
 [![CircleCI Orb Version](https://badges.circleci.com/orbs/juburr/melange-orb.svg)](https://circleci.com/developer/orbs/orb/juburr/melange-orb)
@@ -20,7 +20,7 @@ Strict SHA-512 verification by default · Installs without `sudo` · No usage da
 ![SHA-512 verified by default](https://img.shields.io/badge/SHA--512-strict%20by%20default-16A34A?style=for-the-badge)
 ![melange installs without sudo](https://img.shields.io/badge/install-no%20sudo-DB2777?style=for-the-badge)
 
-**[Quick Start](#-quick-start)** · **[Features](#-why-melange-orb)** · **[Building Packages](#-building-packages)** · **[Commands](#-commands)** · **[Checksums](#-checksum-verification)** · **[Security](#-secure-by-design)**
+**[Quick Start](#-quick-start)** · **[Features](#-why-melange-orb)** · **[Building Packages](#-building-packages)** · **[Commands](#-commands)** · **[GitHub Actions](#-github-actions)** · **[Checksums](#-checksum-verification)** · **[Security](#-secure-by-design)**
 
 <sub>An unofficial, community-maintained orb. [Contributions are welcome!](#-contributing)</sub>
 
@@ -94,7 +94,7 @@ Add the orb, call `melange/install`, then use the `melange` CLI directly in late
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@1.1.0
+  melange: juburr/melange-orb@1.2.0
 
 jobs:
   build-apks:
@@ -202,7 +202,48 @@ Prepares a Linux machine executor for `melange build --runner bubblewrap`. It ta
 
 Installing a package and loading a profile need root. The command runs them directly as root, or through `sudo -n` otherwise, which never prompts for a password. CircleCI's machine executors allow passwordless `sudo`. The Docker executor can't run bubblewrap at all, so the command fails there (see [Why Not the Docker Executor?](#why-not-the-docker-executor)). On a system with another package manager, install `bubblewrap` in an earlier step and the command does the rest.
 
+## ⚡ GitHub Actions
+
+Both commands also come as GitHub Actions, for workflows on GitHub. They run the same scripts as the orb, so they install and verify melange the same way, and take the same inputs with the same defaults.
+
+| Action | Orb command | Inputs |
+| --- | --- | --- |
+| `juburr/melange-orb/actions/install` | [`melange/install`](#melangeinstall) | `version`, `install_path`, `verify_checksums`, `caching` |
+| `juburr/melange-orb/actions/setup_bubblewrap` | [`melange/setup_bubblewrap`](#melangesetup_bubblewrap) | None |
+
+```yaml
+jobs:
+  build-apks:
+    runs-on: ubuntu-24.04-arm # or ubuntu-24.04 for amd64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: juburr/melange-orb/actions/install@v1.2.0
+      - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.2.0
+      - name: Generate signing key
+        run: melange keygen
+      - name: Build APKs
+        run: |
+          melange build melange.yaml \
+            --runner bubblewrap \
+            --arch "$(uname -m)" \
+            --signing-key melange.rsa \
+            --source-dir dist \
+            --out-dir packages
+```
+
+How they differ from the orb's commands:
+
+- **Versions.** An action is referenced by the repository's release tag, such as `v1.2.0`, the same tag the orb is published from. There is no moving major tag such as `v1` yet. For the strongest pinning, use the tag's commit SHA: `juburr/melange-orb/actions/install@<sha> # v1.2.0`.
+- **Environment variables.** The orb expands `$NAME` in `version` and `install_path` with the CircleCI CLI, which GitHub's runners don't have, so the actions take values as they are. Use GitHub's expressions instead, such as `version: ${{ vars.MELANGE_VERSION }}`. A leading `~` in `install_path` is still the home directory.
+- **Caching.** `caching` stores the verified release with [`actions/cache`](https://github.com/actions/cache), with the same key ingredients as the orb (melange version, CPU architecture, home directory). The cache is restored before the install and saved right after it, and the release is verified again when restored. It counts toward the repository's GitHub Actions cache storage.
+- **`PATH`.** `install` puts `install_path` on the `PATH` of later steps through `GITHUB_PATH`.
+- **Runners.** GitHub-hosted Linux runners are full virtual machines with Docker and passwordless `sudo`, so both melange runners work there. CI builds and verifies a signed APK with each of them on `ubuntu-24.04` and `ubuntu-24.04-arm`. A self-hosted runner that runs jobs in an unprivileged container has the [same limits](#why-not-the-docker-executor) as CircleCI's Docker executor.
+
+The actions are composite actions in [`actions/`](actions), next to the orb's source. Each passes its inputs to the orb's script as environment variables, and [`actions/run_script.sh`](actions/run_script.sh) gives the script what CircleCI would: a `BASH_ENV` file for the values it hands to later steps, which it then passes on through `GITHUB_PATH` and `GITHUB_ENV`.
+
 ## 📦 Upgrading
+
+Upgrading from v1.1.0 to v1.2.0? Nothing changes for CircleCI pipelines. v1.2.0 adds [GitHub Actions](#-github-actions) for both commands.
 
 Upgrading from v1.0.0 to v1.1.0? Nothing changes for existing pipelines. v1.1.0 adds the [`setup_bubblewrap`](#melangesetup_bubblewrap) command.
 
@@ -220,7 +261,7 @@ Behavior changes:
 - **Least Privilege**: `install` puts melange in a user-owned directory and never uses `sudo`. Only `setup_bubblewrap`, which you add for the bubblewrap runner, runs commands as root: the package manager, and `apparmor_parser` to allow user namespaces for `bwrap` alone instead of lifting the restriction for every program.
 - **Integrity**: SHA-512 checksum validation of downloaded binaries, on by default and failing closed: a melange version this orb has no checksum for is refused, not installed unverified, and a binary that can't run on the executor never replaces an existing install. See [Checksum Verification](#-checksum-verification) for the `known_versions` and `false` opt-outs.
 - **Provenance**: Installs directly from melange's official [releases page](https://github.com/chainguard-dev/melange/releases/) on GitHub. No third-party websites, domains, or proxies are used. `setup_bubblewrap` installs bubblewrap from the package repositories the executor is already configured with.
-- **Confidentiality**: All secrets and environment variables are handled in accordance with CircleCI's [security recommendations](https://circleci.com/docs/security-recommendations/) and [best practices](https://circleci.com/docs/orbs-best-practices/).
+- **Confidentiality**: All secrets and environment variables are handled in accordance with CircleCI's [security recommendations](https://circleci.com/docs/security-recommendations/) and [best practices](https://circleci.com/docs/orbs-best-practices/). The GitHub Actions pass inputs to the scripts as environment variables, never pasting them into a script, and pin the actions they use (`actions/cache`) to a commit SHA.
 - **Privacy**: No usage data of any kind is collected or shipped back to the orb developer.
 
 > [!IMPORTANT]
@@ -238,6 +279,8 @@ Linux executors on `x86_64` (amd64) and `aarch64`/`arm64` (arm64), including Cir
 `install` needs bash 4 or newer, `curl` or `wget`, `awk`, `tar`, `gzip`, and the standard coreutils, including `mktemp` and, when it verifies, `sha512sum`. CI runs it on the Docker executor (`cimg/base`) and on amd64 and arm64 machine executors (`ubuntu-2404:current`); for `melange build` itself, use a machine executor (see [Choosing a Runner](#choosing-a-runner)).
 
 The download cache is keyed by melange version, executor architecture and home directory, so amd64 and arm64 jobs in the same project never restore each other's downloads. On executors whose `PATH` doesn't already include `install_path` (for example, machine executors), `install` adds it for later steps through `BASH_ENV`.
+
+The [GitHub Actions](#-github-actions) run on GitHub-hosted `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` (arm64) runners, which CI covers, and on self-hosted Linux runners with the same tools.
 
 ## 🔐 Checksum Verification
 
@@ -303,6 +346,8 @@ Hosts to allow (HTTPS, port 443) when running on a locked-down or self-hosted ru
 
 The `docker` runner pulls no container images, since melange builds the build environment locally, so it needs no registry access.
 
+With `caching`, the GitHub `install` action also reaches GitHub's cache service through `actions/cache`. GitHub-hosted runners always can; a self-hosted runner needs the hosts GitHub lists for [communication with GitHub](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#communication-between-self-hosted-runners-and-github).
+
 `setup_bubblewrap` downloads nothing itself. When `bubblewrap` isn't installed, the package manager fetches it from the repositories the machine is configured with. On Ubuntu those are its archive mirrors, by default `archive.ubuntu.com` and `security.ubuntu.com` (`ports.ubuntu.com` on arm64), usually over HTTP on port 80. `apt-get update` also contacts every other repository in the machine's sources, but the install carries on if those fail.
 
 ## 🤝 Contributing
@@ -311,9 +356,9 @@ This is an unofficial, community-maintained orb, and contributions are welcome! 
 
 - **Found a bug or have an idea?** [Open an issue](https://github.com/juburr/melange-orb/issues).
 - **Need a newer melange release?** Generate its checksums with `src/scripts/install_hash.sh -v <version>`, paste them into the `sha512sums` table in [`src/scripts/install.sh`](src/scripts/install.sh), and open a pull request. The script downloads the amd64 and arm64 tarballs, checks them against the SHA-256 checksums melange publishes with the release (`checksums.txt`), and prints one lookup table entry per architecture. It needs bash 4 or newer, `curl`, `awk`, `sed`, `tar`, `gzip` and the standard coreutils, including `mktemp`, `sha256sum` and `sha512sum`. For a release with nothing published to check against, `-c` takes a checksum from another official source (a SHA-1 one also needs `sha1sum`), or `NONE`; it never overrides what the release did publish.
-- **Before opening a pull request**, run `yamllint .`, `shellcheck src/scripts/*.sh`, `bash tests/install_test.sh`, `bash tests/setup_bubblewrap_test.sh`, `bash tests/env_subst_test.sh` and `bash tests/shell_conventions_test.sh`. The install tests stub out the network, and the setup_bubblewrap tests stub out `sudo`, the package managers and `bwrap`, so they run anywhere without changing the machine.
+- **Before opening a pull request**, run `yamllint .`, `shellcheck src/scripts/*.sh actions/*.sh tests/*.sh`, `bash tests/install_test.sh`, `bash tests/setup_bubblewrap_test.sh`, `bash tests/actions_test.sh`, `bash tests/env_subst_test.sh` and `bash tests/shell_conventions_test.sh`. The install tests stub out the network, and the setup_bubblewrap tests stub out `sudo`, the package managers and `bwrap`, so they run anywhere without changing the machine.
 
-CI lints and packs the orb, runs ShellCheck, and runs the install and build smoke tests on amd64 and arm64 before any release is published.
+CI lints and packs the orb, runs ShellCheck, and runs the install and build smoke tests on amd64 and arm64 before any release is published. A GitHub workflow ([`.github/workflows/actions.yml`](.github/workflows/actions.yml)) runs the same tests with the GitHub Actions on GitHub's own runners. `tests/actions_test.sh` keeps each action in step with its command: the same inputs and defaults, passed to the same scripts.
 
 ## 🎨 Logo
 

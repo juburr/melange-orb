@@ -1,0 +1,18 @@
+name: Set up bubblewrap for melange
+description: >
+  Prepares a Linux runner for melange's bubblewrap runner, so `melange build
+  --runner bubblewrap` can create its build environment. Installs bubblewrap
+  with the system package manager when it is missing, and on Ubuntu 23.10
+  and newer, where AppArmor restricts unprivileged user namespaces, loads an
+  AppArmor profile that allows them for bwrap only. Changes need root and use
+  passwordless sudo, which GitHub-hosted runners have; nothing is changed
+  when bwrap already works. The GitHub Actions twin of the orb's
+  setup_bubblewrap command.
+author: juburr
+
+runs:
+  using: composite
+  steps:
+    - name: Set up bubblewrap for melange
+      shell: bash
+      run: bash "${GITHUB_ACTION_PATH}/../run_script.sh" "${GITHUB_ACTION_PATH}/../../src/scripts/setup_bubblewrap.sh"
