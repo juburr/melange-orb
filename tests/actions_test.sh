@@ -5,15 +5,26 @@
 #   - every orb command has an action of the same name, and every action a
 #     command, so the two can't drift apart
 #   - each action takes the command's parameters as inputs, with the same
-#     defaults, passes each to its script as the same PARAM_ variable the
-#     command sets, and runs the scripts the command includes
-#   - inputs only reach a step through env, never inside a run script, where
-#     GitHub would paste them in as code
+#     defaults, passes each to its scripts as the same PARAM_ variables the
+#     command sets, and runs the scripts the command includes. A command
+#     whose steps run other commands of the orb (an install command that
+#     runs install_<tool>, say) must run what those commands run, with the
+#     inputs the command passes them
+#   - inputs only reach a step through env, if: conditions and paths (a
+#     step's working-directory, or an action's path), never inside a run
+#     script, where GitHub would paste them in as code
+#   - a command that stores artifacts has an action that uploads them, even
+#     when an earlier step fails
+#   - defaults that a YAML 1.1 reader would take for a boolean or a number
+#     are quoted, since every input is a string
 #   - every action another one uses is pinned to a full commit SHA
 #   - actions/run_script.sh runs a script and passes on what it exports for
 #     later steps: PATH entries through GITHUB_PATH, in order, and other
 #     variables through GITHUB_ENV, multi-line values included; it passes on
-#     nothing when the script fails, and keeps its exit code
+#     nothing when the script fails, keeps its exit code, and hands the
+#     script a library the way CircleCI's << include() >> does
+#
+# Identical in every juburr orb that ships GitHub Actions.
 #
 # Run from a checkout:
 #   bash PATH_TO_THIS_FILE
@@ -65,7 +76,7 @@ same() {
     if [[ "$1" == "$2" ]]; then
         return 0
     fi
-    DETAIL="expected: $2"$'\n'"got:      $1"
+    DETAIL=$(diff <(printf '%s\n' "$2") <(printf '%s\n' "$1") | sed -e 's/^</expected:/' -e 's/^>/got:     /' | grep -v '^[0-9]')
     return 1
 }
 none() {
@@ -93,9 +104,75 @@ fields() {
 }
 
 # passed FILE PATTERN: the "PARAM_X=y" pairs a file sets, from lines such as
-# "PARAM_X: << parameters.y >>" or "PARAM_X: ${{ inputs.y }}", sorted.
+# "PARAM_X: << parameters.y >>" or "PARAM_X: ${{ inputs.y }}", one per
+# line it is set on, so a variable set in two steps counts twice.
 passed() {
-    sed -nE "s/^ +(PARAM_[A-Z0-9_]+): ${2}$/\\1=\\2/p" "$1" | LC_ALL=C sort
+    sed -nE "s/^ +(PARAM_[A-Z0-9_]+): ${2}$/\\1=\\2/p" "$1"
+}
+
+# included FILE: the files a command includes, as their paths under src/.
+included() {
+    grep -oE '<< include\(([^)]+)\) >>' "$1" | sed -E 's/<< include\((.*)\) >>/\1/'
+}
+
+# invoked FILE: for each step of a command that runs another of the orb's
+# commands, "COMMAND PARAMETER INPUT" for each parameter it passes it, and
+# "COMMAND" alone for one it passes none.
+invoked() {
+    awk -v dir="${ROOT}/src/commands" '
+        function known(name,   path, found) { path = dir "/" name ".yml"; found = (getline line < path) > 0; close(path); return found }
+        match($0, /^ +- [a-z_][a-z0-9_]*:[ ]*$/) {
+            name = $0; sub(/^ +- /, "", name); sub(/:[ ]*$/, "", name)
+            indent = index($0, "-")
+            current = ""
+            if (name != "run" && name != "when" && name != "restore_cache" && name != "save_cache" \
+                && name != "store_artifacts" && name != "store_test_results" && known(name)) {
+                current = name; print name
+            }
+            next
+        }
+        current != "" {
+            match($0, /^ */)
+            if (NF && RLENGTH < indent + 2) { current = ""; next }
+            if ($0 ~ /^ +[a-z_][a-z0-9_]*: << parameters\.[a-z0-9_]+ >>$/) {
+                key = $1; sub(/:$/, "", key)
+                value = $0; sub(/^.*parameters\./, "", value); sub(/ >>$/, "", value)
+                print current " " key " " value
+            }
+        }
+    ' "$1"
+}
+
+# expected_passed FILE: the PARAM_ pairs an action for the command in FILE
+# must set: the command's own, and those of every command it runs, with the
+# parameters it passes them renamed to its own.
+expected_passed() {
+    local yml=$1 entry command parameter input pair var name
+    passed "${yml}" '<< parameters\.([a-z0-9_]+) >>'
+    while IFS= read -r command; do
+        [[ "${command}" == *" "* ]] && continue
+        declare -A rename=()
+        while read -r entry parameter input; do
+            [[ "${entry}" == "${command}" && -n "${parameter}" ]] && rename[${parameter}]=${input}
+        done < <(invoked "${yml}")
+        while IFS= read -r pair; do
+            var=${pair%%=*}
+            name=${pair#*=}
+            printf '%s=%s\n' "${var}" "${rename[${name}]:-<${command}.${name} not passed>}"
+        done < <(passed "${ROOT}/src/commands/${command}.yml" '<< parameters\.([a-z0-9_]+) >>')
+        unset rename
+    done < <(invoked "${yml}")
+}
+
+# expected_scripts FILE: the files the action for the command in FILE must
+# use: what the command includes, and what every command it runs includes.
+expected_scripts() {
+    local command
+    included "$1"
+    while IFS= read -r command; do
+        [[ "${command}" == *" "* ]] && continue
+        included "${ROOT}/src/commands/${command}.yml"
+    done < <(invoked "$1")
 }
 
 # --------------------------------------------------------- command and action
@@ -107,25 +184,34 @@ for command_yml in "${ROOT}"/src/commands/*.yml; do
     [[ -f "${action_yml}" ]] || continue
     check "takes the command's parameters as inputs, with the same defaults" \
         same "$(fields "${action_yml}" inputs)" "$(fields "${command_yml}" parameters)"
-    check "passes each input to its script as the command does" \
-        same "$(passed "${action_yml}" '\$\{\{ inputs\.([a-z0-9_]+) \}\}')" \
-        "$(passed "${command_yml}" '<< parameters\.([a-z0-9_]+) >>')"
+    check "passes each input to its scripts as the command does" \
+        same "$(passed "${action_yml}" '\$\{\{ inputs\.([a-z0-9_]+) \}\}' | LC_ALL=C sort)" \
+        "$(expected_passed "${command_yml}" | LC_ALL=C sort)"
     missing=""
     while IFS= read -r script; do
         [[ -n "${script}" ]] || continue
         grep -qF "/src/${script}\"" "${action_yml}" || missing+="${script} "
-    done < <(grep -oE '<< include\((scripts/[^)]+)\) >>' "${command_yml}" | sed -E 's/<< include\((.*)\) >>/\1/')
+    done < <(expected_scripts "${command_yml}" | LC_ALL=C sort -u)
     check "runs every script the command includes" none "${missing}"
+    if grep -qE '^ +- store_artifacts:' "${command_yml}"; then
+        check "uploads the reports as artifacts, even when a step fails" \
+            grep -qE '^ +if: always\(\) && \(inputs\.store_artifacts == .true. \|\| inputs\.store_artifacts == .1.\)$' "${action_yml}"
+    fi
 done
 for action_yml in "${ROOT}"/actions/*/action.yml; do
     name=$(basename "$(dirname "${action_yml}")")
     begin "actions/${name}"
     check "has an orb command of the same name" test -f "${ROOT}/src/commands/${name}.yml"
-    # An input may appear in env (NAME: ${{ inputs.x }}) and in if:
-    # conditions, which GitHub evaluates as expressions, not code.
-    check "uses inputs only in env and if: conditions" none "$(grep -nF '${{ inputs.' "${action_yml}" \
+    # An input may appear in env (NAME: ${{ inputs.x }}), in if: conditions,
+    # which GitHub evaluates as expressions, not code, and as a path: a
+    # step's working-directory, or the path an action it uses takes.
+    # GitHub passes every input as a string; a YAML 1.1 reader takes an
+    # unquoted on or yes for a boolean.
+    check "quotes defaults that read as booleans or numbers" none "$(grep -nEi '^    default: (on|off|yes|no|y|n|true|false|[0-9][0-9.]*)$' "${action_yml}")"
+    check "uses inputs only in env, if: conditions and paths" none "$(grep -nF '${{ inputs.' "${action_yml}" \
         | grep -vE '^[0-9]+: +[A-Z_][A-Z0-9_]*: \$\{\{ inputs\.[a-z0-9_]+ \}\}$' \
-        | grep -vE '^[0-9]+: +if: ')"
+        | grep -vE '^[0-9]+: +(working-directory|path): \$\{\{ inputs\.[a-z0-9_]+ \}\}$' \
+        | grep -vE '^[0-9]+: +(- )?if: ')"
 done
 
 begin "pinned actions"
@@ -137,17 +223,23 @@ check "every action used is pinned to a commit SHA, with its version in a commen
 # --------------------------------------------------------------- run_script.sh
 # run SCRIPT_BODY [VAR=value ...]: runs a script with that body through
 # run_script.sh, with fresh GITHUB_ENV and GITHUB_PATH files. Sets RC and
-# OUTPUT.
+# OUTPUT. RUN_ARGS holds any NAME=FILE arguments for run_script.sh.
+RUN_ARGS=()
 run() {
-    local body=$1
+    local body=$1 vars=()
     shift
+    # Bash 4.0 reads an empty "$@" as unset.
+    if [[ $# -gt 0 ]]; then
+        vars=("$@")
+    fi
     rm -rf "${WORK}/case" && mkdir -p "${WORK}/case"
     printf '#!/bin/bash\nset -euo pipefail\n%s\n' "${body}" > "${WORK}/case/script.sh"
     : > "${WORK}/case/env"
     : > "${WORK}/case/path"
     RC=0
-    OUTPUT=$(env GITHUB_ENV="${WORK}/case/env" GITHUB_PATH="${WORK}/case/path" "$@" \
-        bash "${RUN_SCRIPT}" "${WORK}/case/script.sh" 2>&1) || RC=$?
+    OUTPUT=$(env GITHUB_ENV="${WORK}/case/env" GITHUB_PATH="${WORK}/case/path" ${vars[@]+"${vars[@]}"} \
+        bash "${RUN_SCRIPT}" "${WORK}/case/script.sh" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} 2>&1) || RC=$?
+    RUN_ARGS=()
 }
 github_path() { cat "${WORK}/case/path"; }
 github_env() { cat "${WORK}/case/env"; }
@@ -182,6 +274,19 @@ run 'printf '"'"'export %s=%q\n'"'"' KEPT "$KEPT" >> "${BASH_ENV}"' KEPT=same
 check "leaves out a variable it doesn't change" none "$(github_env)"
 run 'printf '"'"'export %s=%q\n'"'"' QUOTED "a \"b\" \$c \`d\`" >> "${BASH_ENV}"'
 check "passes quotes, dollars and backticks as they are" same "$(env_value QUOTED)" 'a "b" $c `d`'
+
+begin "run_script.sh: libraries"
+printf '%s\n' 'lib_greet() { echo "hello from the library"; }' > "${WORK}/lib.sh"
+RUN_ARGS=("SCRIPT_TEST_LIB=${WORK}/lib.sh")
+run 'eval "${SCRIPT_TEST_LIB}"; lib_greet; printf '"'"'export %s=%q\n'"'"' DONE yes >> "${BASH_ENV}"'
+check "sets SCRIPT_ variables to a file's contents, as << include() >> does" output_has "hello from the library"
+check "and doesn't pass the library on to later steps" same "$(github_env | grep -c '^SCRIPT_TEST_LIB<<')" 0
+RUN_ARGS=("NOT_A_SCRIPT_VAR=${WORK}/lib.sh")
+run 'true'
+check "refuses a variable that doesn't start with SCRIPT_" rc_is 2
+RUN_ARGS=("SCRIPT_TEST_LIB=${WORK}/missing.sh")
+run 'true'
+check "refuses a file that doesn't exist" rc_is 2
 
 begin "run_script.sh: the script's own result"
 run 'echo "to stdout"; echo "WARN: to stderr" >&2'

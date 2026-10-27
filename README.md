@@ -100,7 +100,7 @@ Add the orb and call `melange/install`:
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@1.2.0
+  melange: juburr/melange-orb@1.2.1
 
 jobs:
   build-apks:
@@ -149,7 +149,7 @@ jobs:
     runs-on: ubuntu-24.04-arm # or ubuntu-24.04 for amd64
     steps:
       - uses: actions/checkout@v7
-      - uses: juburr/melange-orb/actions/install@v1.2.0
+      - uses: juburr/melange-orb/actions/install@v1.2.1
       - name: Generate signing key
         run: melange keygen # writes melange.rsa and melange.rsa.pub
       - name: Build APKs
@@ -247,13 +247,13 @@ Each of the orb's commands has a GitHub Action of the same name. The actions run
 The [Quick Start](#github-actions) shows a complete workflow. To build with the bubblewrap runner instead of docker, add the setup step after the install and pass `--runner bubblewrap`:
 
 ```yaml
-      - uses: juburr/melange-orb/actions/install@v1.2.0
-      - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.2.0
+      - uses: juburr/melange-orb/actions/install@v1.2.1
+      - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.2.1
 ```
 
 How they differ from the orb's commands:
 
-- **Versions.** An action is referenced by the repository's release tag, such as `v1.2.0`, the same tag the orb is published from. There is no moving major tag such as `v1` yet. For the strongest pinning, use the tag's commit SHA: `juburr/melange-orb/actions/install@<sha> # v1.2.0`.
+- **Versions.** An action is referenced by the repository's release tag, such as `v1.2.1`, the same tag the orb is published from. There is no moving major tag such as `v1` yet. For the strongest pinning, use the tag's commit SHA: `juburr/melange-orb/actions/install@<sha> # v1.2.1`.
 - **Environment variables.** The orb expands `$NAME` in `version` and `install_path` with the CircleCI CLI, which GitHub's runners don't have, so the actions take values as they are. Use GitHub's expressions instead, such as `version: ${{ vars.MELANGE_VERSION }}`. A leading `~` in `install_path` is still the home directory.
 - **Caching.** `caching` stores the verified release with [`actions/cache`](https://github.com/actions/cache), with the same key ingredients as the orb (melange version, CPU architecture, home directory). The cache is restored before the install and saved right after it, and the release is verified again when restored. It counts toward the repository's GitHub Actions cache storage.
 - **`PATH`.** `install` puts `install_path` on the `PATH` of later steps through `GITHUB_PATH`.
@@ -262,6 +262,8 @@ How they differ from the orb's commands:
 The actions are composite actions in [`actions/`](actions), next to the orb's source. Each passes its inputs to the orb's script as environment variables, and [`actions/run_script.sh`](actions/run_script.sh) gives the script what CircleCI would: a `BASH_ENV` file for the values it hands to later steps, which it then passes on through `GITHUB_PATH` and `GITHUB_ENV`.
 
 ## 📦 Upgrading
+
+Upgrading from v1.2.0 to v1.2.1? Nothing changes for pipelines or workflows. The GitHub Actions' `actions/run_script.sh` is now the copy every juburr orb with actions shares, which also takes optional library files that melange's actions don't use.
 
 Upgrading from v1.1.0 to v1.2.0? The default `version` is now melange 0.63.1 (it was 0.61.2), and the checksum table covers every release up to it. Set `version: 0.61.2` to stay on the old default. Nothing else changes for CircleCI pipelines: v1.2.0 also adds [GitHub Actions](#-github-actions) for both commands.
 
@@ -395,5 +397,5 @@ Need the logo for a slide deck, blog post, or internal developer portal? PNGs wi
   <br>
   <sub>Signed APKs, built in CI. If this orb helps your team, a ⭐ helps others find it.</sub>
   <br>
-  <sub><a href="#melange-orb-for-circleci">Back to top ↑</a></sub>
+  <sub><a href="#melange-for-circleci-and-github-actions">Back to top ↑</a></sub>
 </div>
