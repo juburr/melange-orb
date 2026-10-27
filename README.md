@@ -395,5 +395,5 @@ Need the logo for a slide deck, blog post, or internal developer portal? PNGs wi
   <br>
   <sub>Signed APKs, built in CI. If this orb helps your team, a ⭐ helps others find it.</sub>
   <br>
-  <sub><a href="#melange-orb-for-circleci">Back to top ↑</a></sub>
+  <sub><a href="#melange-for-circleci-and-github-actions">Back to top ↑</a></sub>
 </div>
