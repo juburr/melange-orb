@@ -8,21 +8,41 @@
 # GITHUB_PATH, and other variables through GITHUB_ENV. It is identical in
 # every juburr orb that ships GitHub Actions.
 #
-# Usage: run_script.sh SCRIPT
+# Usage: run_script.sh SCRIPT [NAME=FILE ...]
+#
+# Each NAME=FILE sets the environment variable NAME, which must start with
+# SCRIPT_, to the contents of FILE, as a CircleCI command passes a shared
+# library to its script with << include(FILE) >>.
 #
 # The script's exit code is the step's; nothing is passed on when it fails.
 
 set -euo pipefail
 
-if [[ $# -ne 1 || ! -f "$1" ]]; then
-    echo "ERROR: Usage: run_script.sh SCRIPT, where SCRIPT is one of the orb's scripts." >&2
+if [[ $# -lt 1 || ! -f "$1" ]]; then
+    echo "ERROR: Usage: run_script.sh SCRIPT [NAME=FILE ...], where SCRIPT is one of the orb's scripts." >&2
     exit 2
 fi
+SCRIPT=$1
+shift
 for name in GITHUB_ENV GITHUB_PATH; do
     if [[ -z "${!name:-}" ]]; then
         echo "ERROR: ${name} is not set. run_script.sh runs the orb's scripts in a GitHub Actions step." >&2
         exit 2
     fi
+done
+# Bash 4.0 reads an empty "$@" as unset.
+SETTINGS=()
+if [[ $# -gt 0 ]]; then
+    SETTINGS=("$@")
+fi
+for setting in ${SETTINGS[@]+"${SETTINGS[@]}"}; do
+    name=${setting%%=*}
+    file=${setting#*=}
+    if [[ "${setting}" != *=* || ! "${name}" =~ ^SCRIPT_[A-Z0-9_]+$ || ! -f "${file}" ]]; then
+        echo "ERROR: ${setting} must be NAME=FILE, with NAME starting with SCRIPT_ and FILE one of the orb's files." >&2
+        exit 2
+    fi
+    export "${name}=$(cat "${file}")"
 done
 
 WORK=$(mktemp -d)
@@ -32,7 +52,7 @@ trap 'rm -rf "${WORK}"' EXIT
 export BASH_ENV="${WORK}/bash_env"
 : > "${BASH_ENV}"
 rc=0
-bash "$1" || rc=$?
+bash "${SCRIPT}" || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
     exit "${rc}"
 fi
@@ -45,7 +65,7 @@ fi
 env -u BASH_ENV bash --noprofile --norc -c 'env -0' > "${WORK}/before"
 # shellcheck disable=SC2016 # $1 is expanded by the inner shell
 if ! env -u BASH_ENV bash --noprofile --norc -c '. "$1" && env -0' _ "${BASH_ENV}" > "${WORK}/after"; then
-    echo "ERROR: The exports $1 wrote for later steps could not be read." >&2
+    echo "ERROR: The exports ${SCRIPT} wrote for later steps could not be read." >&2
     exit 1
 fi
 
@@ -71,7 +91,7 @@ while IFS= read -r -d '' entry; do
     name=${entry%%=*}
     value=${entry#*=}
     case "${name}" in
-        _ | SHLVL | PWD | OLDPWD | BASH_ENV | BASH_FUNC_*) continue ;;
+        _ | SHLVL | PWD | OLDPWD | BASH_ENV | BASH_FUNC_* | SCRIPT_*) continue ;;
     esac
     if [[ -n "${BEFORE[${name}]+set}" && "${BEFORE[${name}]}" == "${value}" ]]; then
         continue
