@@ -4,7 +4,7 @@ description: >
 usage:
   version: 2.1
   orbs:
-    melange: juburr/melange-orb@1.2.1
+    melange: juburr/melange-orb@1.2.2
   jobs:
     build-images:
       docker:
