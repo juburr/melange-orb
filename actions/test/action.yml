@@ -1,0 +1,86 @@
+name: Test APK packages with melange
+description: >
+  Runs a package's test pipeline (its test: block) with melange test, in a
+  fresh environment that installs the package from the repositories in
+  repository_append, by default the packages build wrote. Run install first,
+  and on a machine executor, as for build. The GitHub Actions twin of the orb's
+  test command.
+author: juburr
+
+inputs:
+  arch:
+    description: >
+      Architectures to test, separated by commas, such as x86_64,aarch64. Empty
+      tests only this machine's architecture. "all" tests every architecture
+      the package lists.
+    default: ""
+  config:
+    description: >
+      Path of the melange configuration whose tests to run.
+    default: melange.yaml
+  env_file:
+    description: >
+      Files of environment variables to preload in the test environment,
+      separated by commas, spaces or newlines.
+    default: ""
+  extra_args:
+    description: >
+      More arguments for melange test, split like shell words, such as
+      --timeout 10m. Nothing in them is run as shell code.
+    default: ""
+  keyring_append:
+    description: >
+      Public keys to trust for those repositories, separated by commas, spaces
+      or newlines. The default is the public key keygen writes by default.
+    default: melange.rsa.pub
+  package:
+    description: >
+      Package for the main test to install instead of the configuration's
+      package, such as hello=1.2.3-r0 to test one version. Empty installs the
+      configuration's package. Subpackages with tests are tested either way.
+    default: ""
+  pipeline_dirs:
+    description: >
+      Directories of your own pipelines for the tests' uses: steps, separated
+      by commas, spaces or newlines.
+    default: ""
+  repository_append:
+    description: >
+      Repositories to install the package under test from, separated by commas,
+      spaces or newlines. The default is build's default out_dir.
+    default: packages
+  runner:
+    description: >
+      Runner that creates the test environment, as for build.
+    default: docker
+  source_dir:
+    description: >
+      Directory whose files the test workspace starts with. Empty uses the
+      configuration file's directory.
+    default: ""
+  test_package_append:
+    description: >
+      More packages to install in the test environment, separated by commas,
+      spaces or newlines, such as busybox for a test that needs a shell.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Test packages with melange
+      shell: bash
+      env:
+        PARAM_ARCH: ${{ inputs.arch }}
+        PARAM_CONFIG: ${{ inputs.config }}
+        PARAM_ENV_FILE: ${{ inputs.env_file }}
+        PARAM_EXTRA_ARGS: ${{ inputs.extra_args }}
+        PARAM_KEYRING_APPEND: ${{ inputs.keyring_append }}
+        PARAM_PACKAGE: ${{ inputs.package }}
+        PARAM_PIPELINE_DIRS: ${{ inputs.pipeline_dirs }}
+        PARAM_REPOSITORY_APPEND: ${{ inputs.repository_append }}
+        PARAM_RUNNER: ${{ inputs.runner }}
+        PARAM_SOURCE_DIR: ${{ inputs.source_dir }}
+        PARAM_TEST_PACKAGE_APPEND: ${{ inputs.test_package_append }}
+      run: >-
+        bash "${GITHUB_ACTION_PATH}/../run_script.sh" "${GITHUB_ACTION_PATH}/../../src/scripts/test.sh"
+        "SCRIPT_MELANGE_LIB=${GITHUB_ACTION_PATH}/../../src/scripts/lib/melange.sh"

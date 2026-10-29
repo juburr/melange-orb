@@ -31,6 +31,8 @@ jobs:
           persist-credentials: false
       - name: Run the actions tests
         run: bash tests/actions_test.sh
+      - name: Run the build, test, keygen and index tests against a stand-in melange
+        run: bash tests/commands_test.sh
 
   install:
     strategy:
@@ -104,9 +106,9 @@ jobs:
       - name: Verify the install
         run: melange version | grep -F 'v0.63.1'
 
-  # Runs what a workflow does after install: generate a signing key, then
-  # build a signed APK for the runner's own architecture that packages a
-  # prebuilt binary.
+  # Runs a workflow with the actions: generate a signing key, build a signed
+  # APK for the runner's own architecture that packages a prebuilt binary,
+  # run its test pipeline, then write its index again with index.
   build-smoke:
     strategy:
       fail-fast: false
@@ -126,19 +128,76 @@ jobs:
           docker version --format 'docker server {{.Server.Version}}' || true
       - if: matrix.runner == 'bubblewrap'
         uses: ./actions/setup_bubblewrap
-      - name: Generate signing key
-        run: melange keygen
+      - uses: ./actions/keygen
       - name: Stage prebuilt binary
         run: mkdir -p smoke-src && cp /usr/bin/true smoke-src/hello
-      - name: Build package
-        env:
-          RUNNER: ${{ matrix.runner }}
-        run: |
-          melange build tests/smoke/melange.yaml \
-            --runner "${RUNNER}" \
-            --arch "$(uname -m)" \
-            --signing-key melange.rsa \
-            --source-dir smoke-src \
-            --out-dir packages
+      - uses: ./actions/build
+        with:
+          config: tests/smoke/melange.yaml
+          runner: ${{ matrix.runner }}
+          source_dir: smoke-src
       - name: Verify package
         run: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
+      - uses: ./actions/test
+        with:
+          config: tests/smoke/melange.yaml
+          runner: ${{ matrix.runner }}
+      - name: Remove the index
+        run: rm packages/*/APKINDEX.tar.gz
+      - uses: ./actions/index
+      - name: Verify the new index
+        run: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
+
+  # Signs with a key that exists only in an environment variable, base64
+  # encoded, as one from a secret would: the build writes it to a private file
+  # named after signing_key, so signatures name prod.rsa.pub. The key is a
+  # throwaway one, generated here.
+  signing-key-env-var:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./actions/install
+      - uses: ./actions/keygen
+        with:
+          signing_key: ${{ runner.temp }}/ci-keys/prod.rsa
+      - name: Move the key into a variable
+        env:
+          KEY_DIR: ${{ runner.temp }}/ci-keys
+        run: |
+          echo "MELANGE_PROD_KEY=$(base64 -w0 "${KEY_DIR}/prod.rsa")" >> "${GITHUB_ENV}"
+          cp "${KEY_DIR}/prod.rsa.pub" prod.rsa.pub
+          rm "${KEY_DIR}/prod.rsa"
+      - name: Stage prebuilt binary
+        run: mkdir -p smoke-src && cp /usr/bin/true smoke-src/hello
+      - uses: ./actions/build
+        with:
+          config: tests/smoke/melange.yaml
+          source_dir: smoke-src
+          signing_key: prod.rsa
+          signing_key_env_var: MELANGE_PROD_KEY
+      - name: Verify package
+        run: |
+          bash tests/smoke/verify.sh packages smoke-src/hello prod.rsa.pub
+          [[ ! -e prod.rsa ]]
+
+  # A build that names a key file that isn't there fails before melange runs.
+  missing-key:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./actions/install
+      - id: build
+        continue-on-error: true
+        uses: ./actions/build
+        with:
+          config: tests/smoke/melange.yaml
+      - name: Verify it failed without building anything
+        env:
+          OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          [[ "${OUTCOME}" == failure ]]
+          [[ ! -e packages ]]

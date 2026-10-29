@@ -1,0 +1,45 @@
+name: Index APK packages with melange
+description: >
+  Writes a fresh, signed APKINDEX.tar.gz for each architecture directory under
+  packages_dir with melange index, listing every APK in it. build already
+  indexes what it builds; use this when a directory's packages come from more
+  than one build, such as parallel jobs whose artifacts were downloaded into
+  one directory. The GitHub Actions twin of the orb's index command.
+author: juburr
+
+inputs:
+  arch:
+    description: >
+      Architectures to index, separated by commas, such as x86_64,aarch64. Each
+      must have a directory of APKs. Empty indexes every directory that has
+      any.
+    default: ""
+  packages_dir:
+    description: >
+      Directory with a subdirectory of APKs per architecture, as build writes
+      it.
+    default: packages
+  signing_key:
+    description: >
+      Private key to sign the indexes with, as for build. Empty writes unsigned
+      indexes. With signing_key_env_var, only its file name is used.
+    default: melange.rsa
+  signing_key_env_var:
+    description: >
+      Name of an environment variable holding the private key, as for build.
+      Empty uses the signing_key file.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Index packages with melange
+      shell: bash
+      env:
+        PARAM_ARCH: ${{ inputs.arch }}
+        PARAM_PACKAGES_DIR: ${{ inputs.packages_dir }}
+        PARAM_SIGNING_KEY: ${{ inputs.signing_key }}
+        PARAM_SIGNING_KEY_ENV_VAR: ${{ inputs.signing_key_env_var }}
+      run: >-
+        bash "${GITHUB_ACTION_PATH}/../run_script.sh" "${GITHUB_ACTION_PATH}/../../src/scripts/index.sh"
+        "SCRIPT_MELANGE_LIB=${GITHUB_ACTION_PATH}/../../src/scripts/lib/melange.sh"

@@ -1,0 +1,42 @@
+description: >
+  Writes a fresh, signed APKINDEX.tar.gz for each architecture directory
+  under packages_dir with melange index, listing every APK in it. build
+  already indexes what it builds; use this when a directory's packages come
+  from more than one build, such as parallel jobs combined with a workspace.
+parameters:
+  packages_dir:
+    type: string
+    default: packages
+    description: >
+      Directory with a subdirectory of APKs per architecture, as build writes
+      it. Environment variables are expanded.
+  arch:
+    type: string
+    default: ""
+    description: >
+      Architectures to index, separated by commas, such as x86_64,aarch64.
+      Each must have a directory of APKs. Empty indexes every directory that
+      has any. Environment variables are expanded.
+  signing_key:
+    type: string
+    default: melange.rsa
+    description: >
+      Private key to sign the indexes with, as for build. Empty writes
+      unsigned indexes. With signing_key_env_var, only its file name is used.
+      Environment variables are expanded.
+  signing_key_env_var:
+    type: string
+    default: ""
+    description: >
+      Name of an environment variable holding the private key, as for build.
+      Empty uses the signing_key file.
+steps:
+  - run:
+      name: Index packages with melange
+      environment:
+        PARAM_ARCH: << parameters.arch >>
+        PARAM_PACKAGES_DIR: << parameters.packages_dir >>
+        PARAM_SIGNING_KEY: << parameters.signing_key >>
+        PARAM_SIGNING_KEY_ENV_VAR: << parameters.signing_key_env_var >>
+        SCRIPT_MELANGE_LIB: << include(scripts/lib/melange.sh) >>
+      command: << include(scripts/index.sh) >>

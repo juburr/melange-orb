@@ -57,8 +57,9 @@ jobs:
             melange version | grep -F 'v0.63.1'
             # e_machine field of the ELF header: b700 is aarch64.
             od -An -tx1 -j18 -N2 "$(command -v melange)" | tr -d ' \n' | grep -Fx 'b700'
-  # Runs what a pipeline does after install: generate a signing key, then build a
-  # signed APK for the machine's own architecture that packages a prebuilt binary.
+  # Runs a pipeline with the orb's commands: generate a signing key, build a
+  # signed APK for the machine's own architecture that packages a prebuilt
+  # binary, run its test pipeline, then write its index again with index.
   build-smoke-test:
     parameters:
       executor:
@@ -82,24 +83,59 @@ jobs:
             equal: [bubblewrap, << parameters.runner >>]
           steps:
             - melange-orb/setup_bubblewrap
-      - run:
-          name: Generate Signing Key
-          command: melange keygen
+      - melange-orb/keygen
       - run:
           name: Stage Prebuilt Binary
           command: mkdir -p smoke-src && cp /usr/bin/true smoke-src/hello
-      - run:
-          name: Build Package
-          command: |
-            melange build tests/smoke/melange.yaml \
-              --runner << parameters.runner >> \
-              --arch "$(uname -m)" \
-              --signing-key melange.rsa \
-              --source-dir smoke-src \
-              --out-dir packages
+      - melange-orb/build:
+          config: tests/smoke/melange.yaml
+          runner: << parameters.runner >>
+          source_dir: smoke-src
       - run:
           name: Verify Package
           command: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
+      - melange-orb/test:
+          config: tests/smoke/melange.yaml
+          runner: << parameters.runner >>
+      - run:
+          name: Remove the Index
+          command: rm packages/*/APKINDEX.tar.gz
+      - melange-orb/index
+      - run:
+          name: Verify the New Index
+          command: bash tests/smoke/verify.sh packages smoke-src/hello melange.rsa.pub
+  # Signs with a key that exists only in an environment variable, base64
+  # encoded, as one from a context would: the build writes it to a private
+  # file named after signing_key, so signatures name prod.rsa.pub.
+  signing-key-env-var-test:
+    executor: machine-amd64
+    steps:
+      - checkout
+      - melange-orb/install
+      - melange-orb/keygen:
+          signing_key: /tmp/ci-keys/prod.rsa
+      - run:
+          name: Move the Key Into a Variable
+          command: |
+            printf 'export %s=%q\n' MELANGE_PROD_KEY "$(base64 -w0 /tmp/ci-keys/prod.rsa)" >> "${BASH_ENV}"
+            cp /tmp/ci-keys/prod.rsa.pub prod.rsa.pub
+            rm /tmp/ci-keys/prod.rsa
+      - run:
+          name: Stage Prebuilt Binary
+          command: mkdir -p smoke-src && cp /usr/bin/true smoke-src/hello
+      - melange-orb/build:
+          config: tests/smoke/melange.yaml
+          source_dir: smoke-src
+          signing_key: prod.rsa
+          signing_key_env_var: MELANGE_PROD_KEY
+      - run:
+          name: Verify Package
+          command: |
+            bash tests/smoke/verify.sh packages smoke-src/hello prod.rsa.pub
+            if [[ -e prod.rsa ]]; then
+              echo "The build left the private key in the working directory."
+              exit 1
+            fi
   # bubblewrap can't run in a Docker executor's unprivileged container. This
   # checks that setup_bubblewrap fails there, with an error that says so,
   # rather than leaving melange build to fail later.
@@ -151,6 +187,8 @@ workflows:
               executor: [machine-amd64, machine-arm64]
               runner: [bubblewrap, docker]
           filters: *filters
+      - signing-key-env-var-test:
+          filters: *filters
       - setup-bubblewrap-docker-executor-test:
           filters: *filters
       - env-subst-test:
@@ -170,6 +208,7 @@ workflows:
             - command-test
             - command-test-arm64
             - build-smoke-test
+            - signing-key-env-var-test
             - setup-bubblewrap-docker-executor-test
             - env-subst-test
             - shell-conventions-test

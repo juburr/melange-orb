@@ -1,0 +1,140 @@
+description: >
+  Builds APK packages from a melange configuration with melange build, signed
+  with signing_key, into out_dir/<arch>/ along with a signed APKINDEX.tar.gz
+  that apko can install from. Run install first, and on a machine executor:
+  neither runner works on the Docker executor. The bubblewrap runner also
+  needs setup_bubblewrap.
+parameters:
+  config:
+    type: string
+    default: melange.yaml
+    description: >
+      Path of the melange configuration to build. Environment variables are
+      expanded.
+  arch:
+    type: string
+    default: ""
+    description: >
+      Architectures to build, separated by commas, such as x86_64,aarch64.
+      Empty builds only for this machine's architecture, which needs no
+      emulation. "all" builds every architecture the package lists, as
+      melange does by default. Environment variables are expanded.
+  runner:
+    type: enum
+    enum: ["docker", "bubblewrap", "qemu"]
+    default: docker
+    description: >
+      Runner that creates the isolated build environment. docker works on
+      machine executors without setup; bubblewrap needs setup_bubblewrap;
+      qemu needs /dev/kvm, which CircleCI's machine executors don't have.
+  signing_key:
+    type: string
+    default: melange.rsa
+    description: >
+      Private key to sign the packages and their index with, such as the one
+      keygen writes. Empty builds unsigned packages, which apko refuses unless
+      it ignores signatures. With signing_key_env_var, only its file name is
+      used. Environment variables are expanded.
+  signing_key_env_var:
+    type: string
+    default: ""
+    description: >
+      Name of an environment variable holding the private key, such as one
+      from a context, as PEM or base64-encoded PEM. The key is written to a
+      file only the job's user can read, named like signing_key's file name
+      (melange names each signature after it), and removed when the step
+      ends. Empty uses the signing_key file.
+  source_dir:
+    type: string
+    default: ""
+    description: >
+      Directory whose files the build workspace starts with, such as prebuilt
+      binaries to package. Empty uses the configuration file's directory, as
+      melange does. Environment variables are expanded.
+  out_dir:
+    type: string
+    default: packages
+    description: >
+      Directory to write the packages to, in a subdirectory per architecture.
+      Environment variables are expanded.
+  keyring_append:
+    type: string
+    default: ""
+    description: >
+      More public keys for the build environment's keyring, separated by
+      commas, spaces or newlines, such as the key of a repository in
+      repository_append. Environment variables are expanded.
+  repository_append:
+    type: string
+    default: ""
+    description: >
+      More repositories for the build environment, separated by commas, spaces
+      or newlines, such as the out_dir of an earlier build whose packages this
+      one depends on. Environment variables are expanded.
+  package_append:
+    type: string
+    default: ""
+    description: >
+      More packages to install in the build environment, separated by commas,
+      spaces or newlines. Environment variables are expanded.
+  pipeline_dirs:
+    type: string
+    default: ""
+    description: >
+      Directories of your own pipelines for the configuration's uses: steps,
+      separated by commas, spaces or newlines. Environment variables are
+      expanded.
+  env_file:
+    type: string
+    default: ""
+    description: >
+      Files of environment variables to preload in the build environment,
+      separated by commas, spaces or newlines. Environment variables are
+      expanded.
+  vars_file:
+    type: string
+    default: ""
+    description: >
+      File of variables for the configuration (its vars: block). Environment
+      variables are expanded.
+  namespace:
+    type: string
+    default: ""
+    description: >
+      Namespace for the package URLs in the packages' SBOMs, such as your
+      organization's name. Empty uses melange's default, "unknown".
+      Environment variables are expanded.
+  generate_index:
+    type: boolean
+    default: true
+    description: >
+      Write a signed APKINDEX.tar.gz next to the packages of each
+      architecture.
+  extra_args:
+    type: string
+    default: ""
+    description: >
+      More arguments for melange build, split like shell words, such as
+      --timeout 30m. Nothing in them is run as shell code.
+steps:
+  - run:
+      name: Build packages with melange
+      environment:
+        PARAM_ARCH: << parameters.arch >>
+        PARAM_CONFIG: << parameters.config >>
+        PARAM_ENV_FILE: << parameters.env_file >>
+        PARAM_EXTRA_ARGS: << parameters.extra_args >>
+        PARAM_GENERATE_INDEX: << parameters.generate_index >>
+        PARAM_KEYRING_APPEND: << parameters.keyring_append >>
+        PARAM_NAMESPACE: << parameters.namespace >>
+        PARAM_OUT_DIR: << parameters.out_dir >>
+        PARAM_PACKAGE_APPEND: << parameters.package_append >>
+        PARAM_PIPELINE_DIRS: << parameters.pipeline_dirs >>
+        PARAM_REPOSITORY_APPEND: << parameters.repository_append >>
+        PARAM_RUNNER: << parameters.runner >>
+        PARAM_SIGNING_KEY: << parameters.signing_key >>
+        PARAM_SIGNING_KEY_ENV_VAR: << parameters.signing_key_env_var >>
+        PARAM_SOURCE_DIR: << parameters.source_dir >>
+        PARAM_VARS_FILE: << parameters.vars_file >>
+        SCRIPT_MELANGE_LIB: << include(scripts/lib/melange.sh) >>
+      command: << include(scripts/build.sh) >>

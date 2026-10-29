@@ -1,0 +1,32 @@
+name: Generate a melange signing key
+description: >
+  Generates an RSA key pair for signing packages with melange keygen: the
+  private key at signing_key, readable only by the job's user, and the public
+  key next to it with .pub appended, which apko trusts. Fails rather than
+  replace a key that is already there. A key generated per job suits packages
+  that apko installs in the same pipeline; keep a lasting key, in a secret, for
+  packages you publish. The GitHub Actions twin of the orb's keygen
+  command.
+author: juburr
+
+inputs:
+  key_size:
+    description: >
+      Size of the RSA key, in bits.
+    default: "4096"
+  signing_key:
+    description: >
+      Path of the private key to write. Missing directories are created.
+    default: melange.rsa
+
+runs:
+  using: composite
+  steps:
+    - name: Generate a melange signing key
+      shell: bash
+      env:
+        PARAM_KEY_SIZE: ${{ inputs.key_size }}
+        PARAM_SIGNING_KEY: ${{ inputs.signing_key }}
+      run: >-
+        bash "${GITHUB_ACTION_PATH}/../run_script.sh" "${GITHUB_ACTION_PATH}/../../src/scripts/keygen.sh"
+        "SCRIPT_MELANGE_LIB=${GITHUB_ACTION_PATH}/../../src/scripts/lib/melange.sh"
