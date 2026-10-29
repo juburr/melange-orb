@@ -164,7 +164,7 @@ The [Quick Start](#-quick-start) jobs are the same flow CI runs on every change,
 - `build` and `test` work on the machine's own architecture unless `arch` names others (`x86_64,aarch64`) or is `all`, every architecture the package lists. Building for a foreign architecture needs emulation.
 - Packages are written to `packages/<arch>/` (`x86_64` or `aarch64`) along with an `APKINDEX.tar.gz` signed by `melange.rsa`. apko can then use the directory as a local repository, with `melange.rsa.pub` as the trusted key.
 - `source_dir` is the directory the build workspace starts with, such as prebuilt binaries to package. It defaults to the configuration file's directory, as in melange.
-- `keyring_append`, `repository_append` and `package_append` add keys, repositories and packages to the build environment, for example the `packages` directory of an earlier build that this package depends on. Local paths are made absolute.
+- `keyring_append`, `repository_append` and `package_append` add keys, repositories and packages to the build environment, for example the `packages` directory of an earlier build that this package depends on. Local paths in the key and repository lists are made absolute; package names are passed as they are.
 - `extra_args` takes any other `melange build` flag, such as `--timeout 30m`. It is split like shell words, and nothing in it runs as shell code.
 
 Next, assemble an image: the companion [apko orb](https://github.com/juburr/apko-orb) installs apko with the same checksum verification, and its [local signed repository guide](https://github.com/juburr/apko-orb#-installing-packages-from-a-local-signed-repository) shows how to list `packages` and `melange.rsa.pub` in the apko configuration.
@@ -311,7 +311,7 @@ Builds APK packages with `melange build`, signed with `signing_key`, into `out_d
 | `generate_index` | `true` | Write a signed `APKINDEX.tar.gz` per architecture. |
 | `extra_args` | *(empty)* | More `melange build` arguments, split like shell words, such as `--timeout 30m`. Nothing in them runs as shell code. |
 
-Lists take commas, spaces or newlines, and local paths in them are made absolute.
+Lists take commas, spaces or newlines. Local paths in the lists of keys, repositories, pipeline directories and env files are made absolute; package names are passed as they are.
 
 ### `melange/test`
 

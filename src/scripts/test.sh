@@ -51,15 +51,15 @@ ARGS+=(${MELANGE_ARCH_ARGS[@]+"${MELANGE_ARCH_ARGS[@]}"})
 if [[ -n "${SOURCE_DIR}" ]]; then
     ARGS+=(--source-dir "${SOURCE_DIR}")
 fi
-melange_flags --repository-append "${REPOSITORY_APPEND}"
+melange_path_flags --repository-append "${REPOSITORY_APPEND}"
 ARGS+=(${MELANGE_FLAGS[@]+"${MELANGE_FLAGS[@]}"})
-melange_flags --keyring-append "${KEYRING_APPEND}"
+melange_path_flags --keyring-append "${KEYRING_APPEND}"
 ARGS+=(${MELANGE_FLAGS[@]+"${MELANGE_FLAGS[@]}"})
 melange_flags --test-package-append "${TEST_PACKAGE_APPEND}"
 ARGS+=(${MELANGE_FLAGS[@]+"${MELANGE_FLAGS[@]}"})
-melange_flags --pipeline-dirs "${PIPELINE_DIRS}"
+melange_path_flags --pipeline-dirs "${PIPELINE_DIRS}"
 ARGS+=(${MELANGE_FLAGS[@]+"${MELANGE_FLAGS[@]}"})
-melange_flags --env-file "${ENV_FILE}"
+melange_path_flags --env-file "${ENV_FILE}"
 ARGS+=(${MELANGE_FLAGS[@]+"${MELANGE_FLAGS[@]}"})
 ARGS+=(${MELANGE_WORDS[@]+"${MELANGE_WORDS[@]}"})
 

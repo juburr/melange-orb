@@ -65,10 +65,22 @@ melange_list() {
 
 # melange_flags FLAG VALUE: sets MELANGE_FLAGS to FLAG and an item for each
 # item of the list VALUE (see melange_list), so an empty list adds nothing.
-# Items that are paths to something on this machine are made absolute, since
-# melange can run its build in another directory; anything else, such as a
-# repository URL or a package name, is passed as it is.
+# Items are passed as they are, so a package name stays a name even when a
+# file or directory in the working directory has it.
 melange_flags() {
+    local item
+    melange_list "$2"
+    MELANGE_FLAGS=()
+    for item in ${MELANGE_LIST[@]+"${MELANGE_LIST[@]}"}; do
+        MELANGE_FLAGS+=("${1}" "${item}")
+    done
+}
+
+# melange_path_flags FLAG VALUE: melange_flags for a flag that takes paths
+# or URLs. Items that are paths to something on this machine are made
+# absolute, since melange can run its build in another directory; anything
+# else, such as a repository URL, is passed as it is.
+melange_path_flags() {
     local item
     melange_list "$2"
     MELANGE_FLAGS=()

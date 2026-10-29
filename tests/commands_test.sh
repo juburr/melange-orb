@@ -292,6 +292,16 @@ check "comma-separated packages each get a flag" calls_have "--package-append bu
 check "pipeline directories are passed" calls_have "--pipeline-dirs ${JOB}/pipelines"
 check "env files are passed" calls_have "--env-file ${JOB}/build.env"
 
+# A package name that matches a file or directory in the checkout is still a
+# package name.
+names_prepare() { mkdir -p go; touch busybox; }
+PREPARE=names_prepare
+run build.sh BUILD_DEFAULTS PARAM_PACKAGE_APPEND=go,busybox
+check "package_append items stay package names when a path matches" calls_have "--package-append go --package-append busybox"
+run test.sh TEST_DEFAULTS PARAM_TEST_PACKAGE_APPEND=go,busybox
+PREPARE=""
+check "test_package_append items stay package names when a path matches" calls_have "--test-package-append go --test-package-append busybox"
+
 source_prepare() { mkdir -p dist; echo vars: > vars.yaml; }
 PREPARE=source_prepare
 run build.sh BUILD_DEFAULTS PARAM_SOURCE_DIR=dist PARAM_OUT_DIR=out PARAM_VARS_FILE=vars.yaml PARAM_NAMESPACE=acme PARAM_GENERATE_INDEX=0
