@@ -1,0 +1,54 @@
+description: >
+  Sign packages with a lasting key kept in a context, for packages you
+  publish. MELANGE_SIGNING_KEY holds the private key that melange keygen
+  wrote, as PEM or base64-encoded PEM. The build writes it to a file only the
+  job's user can read, named my-org.rsa after signing_key (melange names each
+  signature after it, so apko must trust my-org.rsa.pub), and removes it when
+  the step ends. Parallel jobs that each build some of the packages share one
+  directory through the workspace, and index writes one index listing them
+  all.
+
+usage:
+  version: 2.1
+  orbs:
+    melange: juburr/melange-orb@1.3.0
+  jobs:
+    build-apk:
+      parameters:
+        config:
+          type: string
+      machine:
+        image: ubuntu-2404:current
+      steps:
+        - checkout
+        - melange/install
+        - melange/build:
+            config: << parameters.config >>
+            signing_key: my-org.rsa
+            signing_key_env_var: MELANGE_SIGNING_KEY
+        - persist_to_workspace:
+            root: .
+            paths:
+              - packages/*/*.apk
+    index-apks:
+      machine:
+        image: ubuntu-2404:current
+      steps:
+        - attach_workspace:
+            at: .
+        - melange/install
+        - melange/index:
+            signing_key: my-org.rsa
+            signing_key_env_var: MELANGE_SIGNING_KEY
+  workflows:
+    build:
+      jobs:
+        - build-apk:
+            name: build-<< matrix.config >>
+            context: melange-signing
+            matrix:
+              parameters:
+                config: [app.yaml, lib.yaml]
+        - index-apks:
+            context: melange-signing
+            requires: [build-apk]

@@ -1,0 +1,96 @@
+description: >
+  Runs a package's test pipeline (its test: block) with melange test, in a
+  fresh environment that installs the package from the repositories in
+  repository_append, by default the packages build wrote. Run install first,
+  and on a machine executor, as for build.
+parameters:
+  config:
+    type: string
+    default: melange.yaml
+    description: >
+      Path of the melange configuration whose tests to run. Environment
+      variables are expanded.
+  package:
+    type: string
+    default: ""
+    description: >
+      Package for the main test to install instead of the configuration's
+      package, such as hello=1.2.3-r0 to test one version. Empty installs the
+      configuration's package. Subpackages with tests are tested either way.
+      Environment variables are expanded.
+  arch:
+    type: string
+    default: ""
+    description: >
+      Architectures to test, separated by commas, such as x86_64,aarch64.
+      Empty tests only this machine's architecture. "all" tests every
+      architecture the package lists. Environment variables are expanded.
+  runner:
+    type: enum
+    enum: ["docker", "bubblewrap", "qemu"]
+    default: docker
+    description: >
+      Runner that creates the test environment, as for build.
+  repository_append:
+    type: string
+    default: packages
+    description: >
+      Repositories to install the package under test from, separated by
+      commas, spaces or newlines. The default is build's default out_dir.
+      Environment variables are expanded.
+  keyring_append:
+    type: string
+    default: melange.rsa.pub
+    description: >
+      Public keys to trust for those repositories, separated by commas, spaces
+      or newlines. The default is the public key keygen writes by default.
+      Environment variables are expanded.
+  test_package_append:
+    type: string
+    default: ""
+    description: >
+      More packages to install in the test environment, separated by commas,
+      spaces or newlines, such as busybox for a test that needs a shell.
+      Environment variables are expanded.
+  source_dir:
+    type: string
+    default: ""
+    description: >
+      Directory whose files the test workspace starts with. Empty uses the
+      configuration file's directory. Environment variables are expanded.
+  pipeline_dirs:
+    type: string
+    default: ""
+    description: >
+      Directories of your own pipelines for the tests' uses: steps, separated
+      by commas, spaces or newlines. Environment variables are expanded.
+  env_file:
+    type: string
+    default: ""
+    description: >
+      Files of environment variables to preload in the test environment,
+      separated by commas, spaces or newlines. Environment variables are
+      expanded.
+  extra_args:
+    type: string
+    default: ""
+    description: >
+      More arguments for melange test, split like shell words, such as
+      --timeout 10m. Nothing in them is run as shell code.
+steps:
+  - run:
+      name: Test packages with melange
+      environment:
+        PARAM_ARCH: << parameters.arch >>
+        PARAM_CONFIG: << parameters.config >>
+        PARAM_ENV_FILE: << parameters.env_file >>
+        PARAM_EXTRA_ARGS: << parameters.extra_args >>
+        PARAM_KEYRING_APPEND: << parameters.keyring_append >>
+        PARAM_PACKAGE: << parameters.package >>
+        PARAM_PIPELINE_DIRS: << parameters.pipeline_dirs >>
+        PARAM_REPOSITORY_APPEND: << parameters.repository_append >>
+        PARAM_RUNNER: << parameters.runner >>
+        PARAM_SOURCE_DIR: << parameters.source_dir >>
+        PARAM_TEST_PACKAGE_APPEND: << parameters.test_package_append >>
+        SCRIPT_MELANGE_LIB: << include(scripts/lib/melange.sh) >>
+      command: << include(scripts/test.sh) >>

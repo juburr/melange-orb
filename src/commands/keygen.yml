@@ -1,0 +1,27 @@
+description: >
+  Generates an RSA key pair for signing packages with melange keygen: the
+  private key at signing_key, readable only by the job's user, and the public
+  key next to it with .pub appended, which apko trusts. Fails rather than
+  replace a key that is already there. A key generated per job suits packages
+  that apko installs in the same pipeline; keep a lasting key, from a context,
+  for packages you publish.
+parameters:
+  signing_key:
+    type: string
+    default: melange.rsa
+    description: >
+      Path of the private key to write. Missing directories are created.
+      Environment variables are expanded.
+  key_size:
+    type: integer
+    default: 4096
+    description: >
+      Size of the RSA key, in bits.
+steps:
+  - run:
+      name: Generate a melange signing key
+      environment:
+        PARAM_KEY_SIZE: << parameters.key_size >>
+        PARAM_SIGNING_KEY: << parameters.signing_key >>
+        SCRIPT_MELANGE_LIB: << include(scripts/lib/melange.sh) >>
+      command: << include(scripts/keygen.sh) >>

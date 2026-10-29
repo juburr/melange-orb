@@ -33,6 +33,14 @@ jobs:
       - run:
           name: Run GitHub Actions tests
           command: bash tests/actions_test.sh
+  test-commands:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run:
+          name: Run the build, test, keygen and index tests against a stand-in melange
+          command: bash tests/commands_test.sh
 
 workflows:
   lint-pack:
@@ -42,6 +50,8 @@ workflows:
       - test-setup-bubblewrap:
           filters: *filters
       - test-actions:
+          filters: *filters
+      - test-commands:
           filters: *filters
       - orb-tools/lint:
           filters: *filters
@@ -56,5 +66,5 @@ workflows:
           pipeline_number: << pipeline.number >>
           vcs_type: << pipeline.project.type >>
           orb_name: melange-orb
-          requires: [test-install, test-setup-bubblewrap, test-actions, orb-tools/lint, orb-tools/pack, orb-tools/review, shellcheck/check]
+          requires: [test-install, test-setup-bubblewrap, test-actions, test-commands, orb-tools/lint, orb-tools/pack, orb-tools/review, shellcheck/check]
           filters: *filters

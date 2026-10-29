@@ -1,7 +1,7 @@
 version: 2.1
 
 description: |
-  Simplifies installation and use of melange within CircleCI, used to build packages for distroless container images.
+  Installs a checksum-verified melange and builds, tests and indexes signed APK packages with it, for distroless container images built with apko.
 
 display:
   home_url: "https://github.com/juburr/melange-orb"
