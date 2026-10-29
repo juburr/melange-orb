@@ -101,7 +101,7 @@ Add the orb and call its commands:
 version: 2.1
 
 orbs:
-  melange: juburr/melange-orb@1.3.0
+  melange: juburr/melange-orb@1.3.1
 
 jobs:
   build-apks:
@@ -144,13 +144,13 @@ jobs:
     runs-on: ubuntu-24.04-arm # or ubuntu-24.04 for amd64
     steps:
       - uses: actions/checkout@v7
-      - uses: juburr/melange-orb/actions/install@v1.3.0
-      - uses: juburr/melange-orb/actions/keygen@v1.3.0 # writes melange.rsa and melange.rsa.pub
-      - uses: juburr/melange-orb/actions/build@v1.3.0
+      - uses: juburr/melange-orb/actions/install@v1.3.1
+      - uses: juburr/melange-orb/actions/keygen@v1.3.1 # writes melange.rsa and melange.rsa.pub
+      - uses: juburr/melange-orb/actions/build@v1.3.1
         with:
           config: melange.yaml
           source_dir: dist
-      - uses: juburr/melange-orb/actions/test@v1.3.0
+      - uses: juburr/melange-orb/actions/test@v1.3.1
         with:
           config: melange.yaml
 ```
@@ -203,7 +203,7 @@ For packages you publish, keep one lasting key in a context (or a GitHub secret)
 On GitHub, set the variable in the `env` of the step, from a secret:
 
 ```yaml
-- uses: juburr/melange-orb/actions/build@v1.3.0
+- uses: juburr/melange-orb/actions/build@v1.3.1
   env:
     MELANGE_SIGNING_KEY: ${{ secrets.MELANGE_SIGNING_KEY }}
   with:
@@ -360,10 +360,10 @@ Each of the orb's commands has a GitHub Action of the same name. The actions run
 The [Quick Start](#github-actions) shows a complete workflow. To build with the bubblewrap runner instead of docker, add the setup step after the install and set `runner: bubblewrap`:
 
 ```yaml
-      - uses: juburr/melange-orb/actions/install@v1.3.0
-      - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.3.0
-      - uses: juburr/melange-orb/actions/keygen@v1.3.0
-      - uses: juburr/melange-orb/actions/build@v1.3.0
+      - uses: juburr/melange-orb/actions/install@v1.3.1
+      - uses: juburr/melange-orb/actions/setup_bubblewrap@v1.3.1
+      - uses: juburr/melange-orb/actions/keygen@v1.3.1
+      - uses: juburr/melange-orb/actions/build@v1.3.1
         with:
           config: melange.yaml
           runner: bubblewrap
@@ -371,7 +371,7 @@ The [Quick Start](#github-actions) shows a complete workflow. To build with the 
 
 How they differ from the orb's commands:
 
-- **Versions.** An action is referenced by the repository's release tag, such as `v1.3.0`, the same tag the orb is published from. There is no moving major tag such as `v1` yet. For the strongest pinning, use the tag's commit SHA: `juburr/melange-orb/actions/install@<sha> # v1.3.0`.
+- **Versions.** An action is referenced by the repository's release tag, such as `v1.3.1`, the same tag the orb is published from. There is no moving major tag such as `v1` yet. For the strongest pinning, use the tag's commit SHA: `juburr/melange-orb/actions/install@<sha> # v1.3.1`.
 - **Environment variables.** The orb expands `$NAME` in string parameters with the CircleCI CLI, which GitHub's runners don't have, so the actions take values as they are. Use GitHub's expressions instead, such as `version: ${{ vars.MELANGE_VERSION }}`. A leading `~` in `install_path` is still the home directory.
 - **Signing keys.** `signing_key_env_var` names a variable that the step using `build` or `index` sets in its `env`, from a secret, as [Signing Keys](#signing-keys) shows. The key never passes through an input.
 - **Caching.** `caching` stores the verified release with [`actions/cache`](https://github.com/actions/cache), with the same key ingredients as the orb (melange version, CPU architecture, home directory). The cache is restored before the install and saved right after it, and the release is verified again when restored. It counts toward the repository's GitHub Actions cache storage.
@@ -381,6 +381,8 @@ How they differ from the orb's commands:
 The actions are composite actions in [`actions/`](actions), next to the orb's source. Each passes its inputs to the orb's script as environment variables, and [`actions/run_script.sh`](actions/run_script.sh) gives the script what CircleCI would: a `BASH_ENV` file for the values it hands to later steps, which it then passes on through `GITHUB_PATH` and `GITHUB_ENV`.
 
 ## 📦 Upgrading
+
+Upgrading from v1.3.0 to v1.3.1? Nothing changes for pipelines or workflows. v1.3.1 fixes [`setup_bubblewrap`](#melangesetup_bubblewrap) on executors whose bash is older than 4.3, such as CentOS 7 and Amazon Linux 2: it read every kernel setting from the wrong path, so it never loaded the AppArmor profile where AppArmor restricts user namespaces, and a failure didn't say that `user.max_user_namespaces` or `kernel.unprivileged_userns_clone` turns them off.
 
 Upgrading from v1.2.2 to v1.3.0? Nothing changes for existing pipelines or workflows. v1.3.0 adds the [`keygen`](#melangekeygen), [`build`](#melangebuild), [`test`](#melangetest) and [`index`](#melangeindex) commands and their GitHub Actions, which run the `melange` steps the examples used to spell out by hand. Steps that run `melange` directly keep working.
 

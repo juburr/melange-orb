@@ -199,7 +199,7 @@ new_case() {
 with_pm() { ln -s "${WORK}/package-manager" "${CASE}/pm/$1"; }
 with_bwrap() { cp "${WORK}/bwrap" "${CASE}/installed/bwrap"; }
 without_sudo() { rm -f "${CASE}/sudo/sudo"; }
-set_sysctl() { printf '%s\n' "$2" > "${FAKE}/proc/sys/${1//./\/}"; }
+set_sysctl() { printf '%s\n' "$2" > "${FAKE}/proc/sys/${1//.//}"; }
 # restrict_userns: AppArmor restricts unprivileged user namespaces, on a
 # machine where profiles can be loaded, such as a machine executor.
 restrict_userns() {
@@ -208,13 +208,18 @@ restrict_userns() {
 }
 
 # run [VAR=value...]: runs the script as a user other than root, with only
-# the stubs and BASE on the PATH.
+# the stubs and BASE on the PATH. (Bash 4.0 takes an empty "$@" for an
+# unbound variable, so the assignments are copied only when there are some.)
 run() {
+    local -a vars=()
+    if [[ $# -gt 0 ]]; then
+        vars=("$@")
+    fi
     OUTPUT=$(cd "${WORK}" && env -i \
         PATH="${CASE}/installed:${CASE}/pm:${CASE}/sudo:${STUBS}:${BASE}" \
         LOG="${LOG}" PROFILE="${PROFILE}" PROFILE_LOADED="${CASE}/profile-loaded" \
         BWRAP_STUB="${WORK}/bwrap" INSTALL_DIR="${CASE}/installed" \
-        FAKE_UID=1001 FAKE_USER=circleci "$@" bash "${SCRIPT}" 2>&1)
+        FAKE_UID=1001 FAKE_USER=circleci ${vars[@]+"${vars[@]}"} bash "${SCRIPT}" 2>&1)
     RC=$?
 }
 

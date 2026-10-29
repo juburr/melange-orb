@@ -54,7 +54,7 @@ require_root() {
 # sysctl_value NAME: prints the kernel setting NAME, such as
 # user.max_user_namespaces, or nothing when this kernel doesn't have it.
 sysctl_value() {
-    local file="/proc/sys/${1//./\/}"
+    local file="/proc/sys/${1//.//}"
     if [[ -r "${file}" ]]; then
         printf '%s\n' "$(< "${file}")"
     fi
