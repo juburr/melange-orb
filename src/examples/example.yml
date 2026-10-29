@@ -7,7 +7,7 @@ description: >
 usage:
   version: 2.1
   orbs:
-    melange: juburr/melange-orb@1.3.0
+    melange: juburr/melange-orb@1.3.1
   jobs:
     build-apks:
       machine:
